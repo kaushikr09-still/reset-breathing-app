@@ -314,6 +314,15 @@ button:focus-visible {
   transform: scale(2.3);
 }
 
+@keyframes idlePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+
+.circle.idle {
+  animation: idlePulse 4.5s ease-in-out infinite;
+}
+
 .phase-info {
   display: flex;
   flex-direction: column;

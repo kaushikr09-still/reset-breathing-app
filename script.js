@@ -6,10 +6,10 @@
       durations: [2, 4, 8],
       defaultMinutes: 4,
       phases: [
-        { label: 'Inhale', speech: 'Breathe in', seconds: 4, circleClass: 'expand' },
-        { label: 'Hold', speech: 'Hold', seconds: 4, circleClass: 'expand' },
-        { label: 'Exhale', speech: 'Breathe out', seconds: 4, circleClass: '' },
-        { label: 'Hold', speech: 'Hold', seconds: 4, circleClass: '' },
+        { label: 'Inhale', audioKey: 'breatheIn', circleClass: 'expand' },
+        { label: 'Hold', audioKey: 'hold', circleClass: 'expand' },
+        { label: 'Exhale', audioKey: 'breatheOut', circleClass: '' },
+        { label: 'Hold', audioKey: 'hold', circleClass: '' },
       ],
     },
     '478': {
@@ -18,9 +18,9 @@
       durations: [2, 4, 8],
       defaultMinutes: 4,
       phases: [
-        { label: 'Inhale', speech: 'Breathe in', seconds: 4, circleClass: 'expand' },
-        { label: 'Hold', speech: 'Hold', seconds: 7, circleClass: 'expand' },
-        { label: 'Exhale', speech: 'Breathe out', seconds: 8, circleClass: '' },
+        { label: 'Inhale', audioKey: 'breatheIn', circleClass: 'expand' },
+        { label: 'Hold', audioKey: 'hold', circleClass: 'expand' },
+        { label: 'Exhale', audioKey: 'breatheOut', circleClass: '' },
       ],
     },
     sigh: {
@@ -29,14 +29,38 @@
       durations: [1, 5],
       defaultMinutes: 1,
       phases: [
-        { label: 'Breathe in', speech: 'Breathe in', seconds: 4, circleClass: 'expand-half' },
-        { label: 'More', speech: 'More', seconds: 1.5, circleClass: 'expand' },
-        { label: 'Sigh it all out', speech: 'Sigh it all out', seconds: 8, circleClass: '' },
+        { label: 'Breathe in', audioKey: 'breatheIn', circleClass: 'expand-half' },
+        { label: 'One more in', audioKey: 'oneMoreIn', circleClass: 'expand' },
+        { label: 'Breathe out fully', audioKey: 'breatheOutFully', circleClass: '' },
       ],
     },
   };
 
-  const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
+  const INTRO_TEXT = "Let's begin. Settle into a comfortable position, and let your shoulders drop.";
+  const OUTRO_TEXT = 'Well done. Notice how you feel, before you carry on.';
+
+  const AUDIO_FILES = {
+    intro: 'audio/intro.mp3',
+    breatheIn: 'audio/breathe-in.mp3',
+    hold: 'audio/hold.mp3',
+    breatheOut: 'audio/breathe-out.mp3',
+    oneMoreIn: 'audio/one-more-in.mp3',
+    breatheOutFully: 'audio/breathe-out-fully.mp3',
+    outro: 'audio/outro.mp3',
+  };
+
+  // Used only when audio is muted (or its real duration hasn't loaded yet),
+  // so the visual animation still has a reasonable pace to run on.
+  const FALLBACK_SECONDS = {
+    intro: 3,
+    breatheIn: 4,
+    hold: 4,
+    breatheOut: 4,
+    oneMoreIn: 1.5,
+    breatheOutFully: 8,
+    outro: 3,
+  };
+
   const MUTE_STORAGE_KEY = 'boxBreathMuted';
   const STREAK_STORAGE_KEY = 'boxBreathStreak';
   const ORDINAL_WORDS = [
@@ -66,27 +90,171 @@
   const durationBackBtn = document.getElementById('duration-back-btn');
 
   let currentTechniqueId = 'box';
-  let currentPhases = TECHNIQUES.box.phases;
-  let phaseIndex = 0;
-  let phaseTimeoutId = null;
-  let countdownIntervalId = null;
-  let secondsRemaining = 0;
   let isMuted = localStorage.getItem(MUTE_STORAGE_KEY) === 'true';
+  let sessionToken = 0;
+  let countdownIntervalId = null;
+
+  // --- Audio preloading -----------------------------------------------
+
+  const audioElements = {};
+  const metadataDurations = {};
+  // Directly-observed real playback time (play -> ended), per cue. This is
+  // the source of truth once we have it: some browsers report an
+  // inaccurate `duration` from metadata for short MP3 clips, so trusting
+  // only the metadata value can desync the visual from what's actually
+  // heard. The measured value self-corrects from the first real play.
+  const measuredDurations = {};
+
+  Object.keys(AUDIO_FILES).forEach((key) => {
+    const audio = new Audio(AUDIO_FILES[key]);
+    audio.preload = 'auto';
+    const captureDuration = () => {
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        metadataDurations[key] = audio.duration;
+      }
+    };
+    audio.addEventListener('loadedmetadata', captureDuration);
+    audio.addEventListener('durationchange', captureDuration);
+    audio.load();
+    audioElements[key] = audio;
+  });
+
+  function getCueSeconds(key) {
+    const measured = measuredDurations[key];
+    if (measured && isFinite(measured) && measured > 0) return measured;
+    const metadata = metadataDurations[key];
+    if (metadata && isFinite(metadata) && metadata > 0) return metadata;
+    return FALLBACK_SECONDS[key] || 4;
+  }
+
+  // --- Cue playback with cancellation support --------------------------
+  // A "cue" is either a real audio clip or, when muted, a silent timer of
+  // equivalent length, so the visual pacing stays reasonable either way.
+
+  let activeAudioEl = null;
+  let activeResolve = null;
+  let activeTimeoutId = null;
+  let activeSafetyTimeoutId = null;
+  let activePhaseSeconds = 0;
+  let activePhaseStart = 0;
+
+  function playCue(key) {
+    const seconds = getCueSeconds(key);
+    activePhaseSeconds = seconds;
+    activePhaseStart = performance.now();
+    return new Promise((resolve) => {
+      activeResolve = resolve;
+      if (isMuted) {
+        activeTimeoutId = setTimeout(() => {
+          activeTimeoutId = null;
+          activeResolve = null;
+          resolve();
+        }, seconds * 1000);
+        return;
+      }
+      const audio = audioElements[key];
+      activeAudioEl = audio;
+      const startedAt = performance.now();
+      audio.currentTime = 0;
+      audio.onended = () => {
+        // Only trust this as the real duration if it played out naturally
+        // start-to-finish, not if it was cut short by Stop or muting.
+        measuredDurations[key] = (performance.now() - startedAt) / 1000;
+        activeAudioEl = null;
+        clearSafetyTimeout();
+        activeResolve = null;
+        resolve();
+      };
+      const playPromise = audio.play();
+      if (playPromise && playPromise.catch) {
+        playPromise.catch(() => {
+          activeAudioEl = null;
+          clearSafetyTimeout();
+          activeResolve = null;
+          resolve();
+        });
+      }
+      // Safety net: some browsers can silently stall audio playback (never
+      // firing 'ended' or rejecting the play() promise) due to autoplay or
+      // media-session quirks we can't detect in advance. Never let a phase
+      // hang the whole session — force it forward after a generous margin
+      // past the expected duration.
+      activeSafetyTimeoutId = setTimeout(() => {
+        activeSafetyTimeoutId = null;
+        if (activeAudioEl === audio) {
+          activeAudioEl.pause();
+          activeAudioEl.onended = null;
+          activeAudioEl = null;
+        }
+        if (activeResolve === resolve) {
+          activeResolve = null;
+          resolve();
+        }
+      }, Math.max(seconds * 1000 + 2000, 4000));
+    });
+  }
+
+  function clearSafetyTimeout() {
+    if (activeSafetyTimeoutId) {
+      clearTimeout(activeSafetyTimeoutId);
+      activeSafetyTimeoutId = null;
+    }
+  }
+
+  function wait(ms) {
+    return new Promise((resolve) => {
+      activeResolve = resolve;
+      activeTimeoutId = setTimeout(() => {
+        activeTimeoutId = null;
+        activeResolve = null;
+        resolve();
+      }, ms);
+    });
+  }
+
+  // Stop button: cancel immediately, we're leaving the screen anyway.
+  function cancelActiveCue() {
+    if (activeAudioEl) {
+      activeAudioEl.pause();
+      activeAudioEl.onended = null;
+      activeAudioEl = null;
+    }
+    if (activeTimeoutId) {
+      clearTimeout(activeTimeoutId);
+      activeTimeoutId = null;
+    }
+    clearSafetyTimeout();
+    if (activeResolve) {
+      const resolve = activeResolve;
+      activeResolve = null;
+      resolve();
+    }
+  }
+
+  // Muting mid-cue: silence audio immediately, but let the visual keep
+  // running to its originally-scheduled moment instead of jump-cutting.
+  function silenceActiveCue() {
+    if (!activeAudioEl) return;
+    activeAudioEl.pause();
+    activeAudioEl.onended = null;
+    activeAudioEl = null;
+    clearSafetyTimeout();
+    const elapsedMs = performance.now() - activePhaseStart;
+    const remainingMs = Math.max(0, activePhaseSeconds * 1000 - elapsedMs);
+    const resolve = activeResolve;
+    activeResolve = null;
+    activeTimeoutId = setTimeout(() => {
+      activeTimeoutId = null;
+      resolve();
+    }, remainingMs);
+  }
+
+  // --- UI helpers --------------------------------------------------------
 
   function updateMuteButton() {
     muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
     muteBtn.setAttribute('aria-pressed', String(isMuted));
     muteBtn.setAttribute('aria-label', isMuted ? 'Unmute narration' : 'Mute narration');
-  }
-
-  function speak(text) {
-    if (isMuted || !synth) return;
-    synth.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.volume = 0.9;
-    synth.speak(utterance);
   }
 
   function showScreen(screen) {
@@ -113,7 +281,7 @@
         note.textContent = 'Usual length';
         option.appendChild(note);
       }
-      option.addEventListener('click', () => startSession(techniqueId, minutes));
+      option.addEventListener('click', () => runSession(techniqueId, minutes));
       durationList.appendChild(option);
     });
     showScreen(durationScreen);
@@ -176,73 +344,103 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  function applyPhase(phase) {
-    phaseLabel.textContent = phase.label;
-    circle.style.setProperty('--phase-duration', `${phase.seconds}s`);
-    circle.className = 'circle' + (phase.circleClass ? ' ' + phase.circleClass : '');
-    speak(phase.speech);
-  }
-
-  function runPhase() {
-    if (secondsRemaining <= 0) {
-      endSession(true);
-      return;
-    }
-    const phase = currentPhases[phaseIndex % currentPhases.length];
-    applyPhase(phase);
-    phaseIndex += 1;
-    phaseTimeoutId = setTimeout(runPhase, phase.seconds * 1000);
-  }
-
-  function startCountdown() {
-    timerLabel.textContent = formatTime(secondsRemaining);
+  function startCountdownDisplay(totalSeconds, startTime, token) {
+    timerLabel.textContent = formatTime(totalSeconds);
     countdownIntervalId = setInterval(() => {
-      secondsRemaining -= 1;
-      if (secondsRemaining < 0) secondsRemaining = 0;
-      timerLabel.textContent = formatTime(secondsRemaining);
-      if (secondsRemaining <= 0) {
+      if (token !== sessionToken) {
+        clearInterval(countdownIntervalId);
+        countdownIntervalId = null;
+        return;
+      }
+      const elapsed = (performance.now() - startTime) / 1000;
+      const remaining = Math.max(0, Math.ceil(totalSeconds - elapsed));
+      timerLabel.textContent = formatTime(remaining);
+      if (remaining <= 0) {
         clearInterval(countdownIntervalId);
         countdownIntervalId = null;
       }
-    }, 1000);
+    }, 250);
   }
 
-  function startSession(techniqueId, minutes) {
-    currentTechniqueId = techniqueId;
-    currentPhases = TECHNIQUES[techniqueId].phases;
-    phaseIndex = 0;
-    secondsRemaining = minutes * 60;
-    showScreen(sessionScreen);
-    circle.className = 'circle';
-    // Force a layout flush so the reset state is committed as a rendered
-    // frame before the first phase's transition starts. Without this, the
-    // circle was still invisible moments earlier (the screen fade hadn't
-    // started), so the browser has no "before" frame to animate from and
-    // the first phase snaps instantly instead of transitioning.
-    void circle.offsetWidth;
-    runPhase();
-    startCountdown();
-  }
-
-  function endSession(completed) {
-    if (phaseTimeoutId) clearTimeout(phaseTimeoutId);
-    if (countdownIntervalId) clearInterval(countdownIntervalId);
-    phaseTimeoutId = null;
-    countdownIntervalId = null;
-    if (synth) synth.cancel();
-    if (completed) {
-      recordStreakCompletion();
-      doneMessage.textContent = TECHNIQUES[currentTechniqueId].closing;
-      renderStreak(doneStreakLabel);
+  function stopCountdownDisplay() {
+    if (countdownIntervalId) {
+      clearInterval(countdownIntervalId);
+      countdownIntervalId = null;
     }
-    showScreen(completed ? doneScreen : homeScreen);
   }
 
-  if (!synth) {
-    muteBtn.style.display = 'none';
-  } else {
-    updateMuteButton();
+  function completeSession() {
+    recordStreakCompletion();
+    doneMessage.textContent = TECHNIQUES[currentTechniqueId].closing;
+    renderStreak(doneStreakLabel);
+    showScreen(doneScreen);
   }
+
+  // --- Session sequencing ------------------------------------------------
+  // Sequence: static idle -> intro -> brief pause -> breathing cycles for
+  // the chosen duration -> static idle -> outro -> completion screen.
+
+  async function runSession(techniqueId, minutes) {
+    const token = ++sessionToken;
+    currentTechniqueId = techniqueId;
+    const technique = TECHNIQUES[techniqueId];
+
+    showScreen(sessionScreen);
+    circle.className = 'circle idle';
+    phaseLabel.textContent = INTRO_TEXT;
+    timerLabel.textContent = '';
+
+    await playCue('intro');
+    if (token !== sessionToken) return;
+
+    await wait(800);
+    if (token !== sessionToken) return;
+
+    circle.classList.remove('idle');
+    void circle.offsetWidth;
+
+    const totalMs = minutes * 60 * 1000;
+    const cycleStart = performance.now();
+    startCountdownDisplay(minutes * 60, cycleStart, token);
+
+    // Check the time budget only between full cycles, never mid-cycle, so
+    // a cycle that's already begun always plays all of its phases through
+    // to its own natural last phase instead of being cut off partway.
+    while (token === sessionToken && performance.now() - cycleStart < totalMs) {
+      for (let i = 0; i < technique.phases.length; i += 1) {
+        const phase = technique.phases[i];
+        const seconds = getCueSeconds(phase.audioKey);
+        phaseLabel.textContent = phase.label;
+        circle.style.setProperty('--phase-duration', `${seconds}s`);
+        circle.className = 'circle' + (phase.circleClass ? ' ' + phase.circleClass : '');
+        await playCue(phase.audioKey);
+        if (token !== sessionToken) return;
+      }
+    }
+    stopCountdownDisplay();
+    if (token !== sessionToken) return;
+
+    circle.className = 'circle idle';
+    void circle.offsetWidth;
+    phaseLabel.textContent = OUTRO_TEXT;
+    timerLabel.textContent = '';
+
+    await playCue('outro');
+    if (token !== sessionToken) return;
+
+    completeSession();
+  }
+
+  function stopSession() {
+    sessionToken += 1;
+    cancelActiveCue();
+    stopCountdownDisplay();
+    showScreen(homeScreen);
+  }
+
+  // --- Wiring --------------------------------------------------------
+
+  updateMuteButton();
 
   startBtn.addEventListener('click', () => showScreen(selectScreen));
   restartBtn.addEventListener('click', () => showScreen(selectScreen));
@@ -251,11 +449,11 @@
   techniqueCards.forEach((card) => {
     card.addEventListener('click', () => showDurationScreen(card.dataset.technique));
   });
-  stopBtn.addEventListener('click', () => endSession(false));
+  stopBtn.addEventListener('click', stopSession);
   muteBtn.addEventListener('click', () => {
     isMuted = !isMuted;
     localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted));
     updateMuteButton();
-    if (isMuted && synth) synth.cancel();
+    if (isMuted) silenceActiveCue();
   });
 })();

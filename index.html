@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reset</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <main id="home-screen" class="screen visible">
+    <h1 class="wordmark">Reset</h1>
+    <p class="subtitle">Take a breath. Choose your reset.</p>
+    <button id="start-btn" class="btn-primary">Begin</button>
+  </main>
+
+  <main id="select-screen" class="screen">
+    <button id="select-back-btn" class="back-link" type="button">&larr; Back</button>
+    <h1 class="screen-title">Choose a Technique</h1>
+    <div class="technique-list">
+      <button class="technique-card" data-technique="sigh" type="button">
+        <span class="technique-name">The Instant Calm</span>
+        <span class="technique-detail">For a fast reset when stress spikes</span>
+        <span class="technique-tagline">Backed by Stanford neuroscience research</span>
+      </button>
+      <button class="technique-card" data-technique="box" type="button">
+        <span class="technique-name">Box Breath</span>
+        <span class="technique-detail">For focus and steadiness before a demanding moment</span>
+        <span class="technique-tagline">Used by Navy SEALs and elite athletes</span>
+      </button>
+      <button class="technique-card" data-technique="478" type="button">
+        <span class="technique-name">The Wind-Down</span>
+        <span class="technique-detail">For winding down before sleep</span>
+        <span class="technique-tagline">Recommended by doctors worldwide for great sleep</span>
+      </button>
+    </div>
+  </main>
+
+  <main id="duration-screen" class="screen">
+    <button id="duration-back-btn" class="back-link" type="button">&larr; Back</button>
+    <h1 class="screen-title" id="duration-title">Box Breath</h1>
+    <p class="subtitle">Choose a length</p>
+    <div class="duration-list" id="duration-list"></div>
+  </main>
+
+  <main id="session-screen" class="screen">
+    <div class="breath-stage">
+      <div id="circle" class="circle"></div>
+    </div>
+    <div class="phase-info">
+      <p id="phase-label" class="phase-label">Inhale</p>
+      <p id="timer-label" class="timer-label">4:00</p>
+    </div>
+    <div class="controls">
+      <button id="stop-btn" class="btn-ghost">Stop</button>
+      <button id="mute-btn" class="btn-ghost" type="button" aria-pressed="false" aria-label="Mute narration">Mute</button>
+    </div>
+  </main>
+
+  <main id="done-screen" class="screen">
+    <p id="done-message" class="done-message"></p>
+    <p id="done-streak-label" class="streak-label hidden"></p>
+    <button id="restart-btn" class="btn-primary">Try another</button>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

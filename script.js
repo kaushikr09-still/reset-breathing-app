@@ -1,4 +1,6 @@
 (() => {
+  // Each phase's duration is fixed and physiologically correct for its
+  // technique, independent of how long its spoken audio cue takes to play.
   const TECHNIQUES = {
     box: {
       name: 'Box Breath',
@@ -6,10 +8,10 @@
       durations: [2, 4, 8],
       defaultMinutes: 4,
       phases: [
-        { label: 'Inhale', audioKey: 'breatheIn', circleClass: 'expand' },
-        { label: 'Hold', audioKey: 'hold', circleClass: 'expand' },
-        { label: 'Exhale', audioKey: 'breatheOut', circleClass: '' },
-        { label: 'Hold', audioKey: 'hold', circleClass: '' },
+        { label: 'Inhale', audioKey: 'breatheIn', seconds: 4, circleClass: 'expand' },
+        { label: 'Hold', audioKey: 'hold', seconds: 4, circleClass: 'expand' },
+        { label: 'Exhale', audioKey: 'breatheOut', seconds: 4, circleClass: '' },
+        { label: 'Hold', audioKey: 'hold', seconds: 4, circleClass: '' },
       ],
     },
     '478': {
@@ -18,9 +20,9 @@
       durations: [2, 4, 8],
       defaultMinutes: 4,
       phases: [
-        { label: 'Inhale', audioKey: 'breatheIn', circleClass: 'expand' },
-        { label: 'Hold', audioKey: 'hold', circleClass: 'expand' },
-        { label: 'Exhale', audioKey: 'breatheOut', circleClass: '' },
+        { label: 'Inhale', audioKey: 'breatheIn', seconds: 4, circleClass: 'expand' },
+        { label: 'Hold', audioKey: 'hold', seconds: 7, circleClass: 'expand' },
+        { label: 'Exhale', audioKey: 'breatheOut', seconds: 8, circleClass: '' },
       ],
     },
     sigh: {
@@ -29,9 +31,9 @@
       durations: [1, 5],
       defaultMinutes: 1,
       phases: [
-        { label: 'Breathe in', audioKey: 'breatheIn', circleClass: 'expand-half' },
-        { label: 'One more in', audioKey: 'oneMoreIn', circleClass: 'expand' },
-        { label: 'Breathe out fully', audioKey: 'breatheOutFully', circleClass: '' },
+        { label: 'Breathe in', audioKey: 'breatheIn', seconds: 4, circleClass: 'expand-half' },
+        { label: 'One more in', audioKey: 'oneMoreIn', seconds: 1.5, circleClass: 'expand' },
+        { label: 'Breathe out fully', audioKey: 'breatheOutFully', seconds: 8, circleClass: '' },
       ],
     },
   };
@@ -49,17 +51,14 @@
     outro: 'audio/outro.mp3',
   };
 
-  // Used only when audio is muted (or its real duration hasn't loaded yet),
-  // so the visual animation still has a reasonable pace to run on.
-  const FALLBACK_SECONDS = {
-    intro: 3,
-    breatheIn: 4,
-    hold: 4,
-    breatheOut: 4,
-    oneMoreIn: 1.5,
-    breatheOutFully: 8,
-    outro: 3,
-  };
+  // Used only for intro/outro when muted, as a reasonable silent pause in
+  // place of the voiceover.
+  const FALLBACK_SECONDS = { intro: 3, outro: 3 };
+
+  // Pause after intro finishes, before the first breathing phase begins,
+  // so there's time to actually settle in rather than "breathe in" starting
+  // almost immediately. The shape stays static/idle throughout this pause.
+  const POST_INTRO_PAUSE_MS = 2000;
 
   const MUTE_STORAGE_KEY = 'boxBreathMuted';
   const STREAK_STORAGE_KEY = 'boxBreathStreak';
@@ -94,159 +93,154 @@
   let sessionToken = 0;
   let countdownIntervalId = null;
 
-  // --- Audio preloading -----------------------------------------------
-
   const audioElements = {};
-  const metadataDurations = {};
-  // Directly-observed real playback time (play -> ended), per cue. This is
-  // the source of truth once we have it: some browsers report an
-  // inaccurate `duration` from metadata for short MP3 clips, so trusting
-  // only the metadata value can desync the visual from what's actually
-  // heard. The measured value self-corrects from the first real play.
-  const measuredDurations = {};
-
   Object.keys(AUDIO_FILES).forEach((key) => {
     const audio = new Audio(AUDIO_FILES[key]);
     audio.preload = 'auto';
-    const captureDuration = () => {
-      if (isFinite(audio.duration) && audio.duration > 0) {
-        metadataDurations[key] = audio.duration;
-      }
-    };
-    audio.addEventListener('loadedmetadata', captureDuration);
-    audio.addEventListener('durationchange', captureDuration);
     audio.load();
     audioElements[key] = audio;
   });
 
-  function getCueSeconds(key) {
-    const measured = measuredDurations[key];
-    if (measured && isFinite(measured) && measured > 0) return measured;
-    const metadata = metadataDurations[key];
-    if (metadata && isFinite(metadata) && metadata > 0) return metadata;
-    return FALLBACK_SECONDS[key] || 4;
-  }
+  // Breathing-phase cues: each one plays in full, every time its phase
+  // occurs, in every cycle, for the whole session — fire-and-forget, never
+  // blocking or influencing phase timing. A cue is allowed to keep playing
+  // even after its own phase's fixed duration has elapsed and the next
+  // phase has already started (e.g. The Instant Calm's "one more in" clip
+  // is slightly longer than its 1.5s phase), since it must never be cut
+  // off partway through. Tracked as a set, not a single reference, because
+  // more than one can legitimately be in flight briefly.
+  const firedAudio = new Set();
 
-  // --- Cue playback with cancellation support --------------------------
-  // A "cue" is either a real audio clip or, when muted, a silent timer of
-  // equivalent length, so the visual pacing stays reasonable either way.
-
-  let activeAudioEl = null;
-  let activeResolve = null;
-  let activeTimeoutId = null;
-  let activeSafetyTimeoutId = null;
-  let activePhaseSeconds = 0;
-  let activePhaseStart = 0;
-
-  function playCue(key) {
-    const seconds = getCueSeconds(key);
-    activePhaseSeconds = seconds;
-    activePhaseStart = performance.now();
-    return new Promise((resolve) => {
-      activeResolve = resolve;
-      if (isMuted) {
-        activeTimeoutId = setTimeout(() => {
-          activeTimeoutId = null;
-          activeResolve = null;
-          resolve();
-        }, seconds * 1000);
-        return;
-      }
-      const audio = audioElements[key];
-      activeAudioEl = audio;
-      const startedAt = performance.now();
-      audio.currentTime = 0;
-      audio.onended = () => {
-        // Only trust this as the real duration if it played out naturally
-        // start-to-finish, not if it was cut short by Stop or muting.
-        measuredDurations[key] = (performance.now() - startedAt) / 1000;
-        activeAudioEl = null;
-        clearSafetyTimeout();
-        activeResolve = null;
-        resolve();
-      };
-      const playPromise = audio.play();
-      if (playPromise && playPromise.catch) {
-        playPromise.catch(() => {
-          activeAudioEl = null;
-          clearSafetyTimeout();
-          activeResolve = null;
-          resolve();
-        });
-      }
-      // Safety net: some browsers can silently stall audio playback (never
-      // firing 'ended' or rejecting the play() promise) due to autoplay or
-      // media-session quirks we can't detect in advance. Never let a phase
-      // hang the whole session — force it forward after a generous margin
-      // past the expected duration.
-      activeSafetyTimeoutId = setTimeout(() => {
-        activeSafetyTimeoutId = null;
-        if (activeAudioEl === audio) {
-          activeAudioEl.pause();
-          activeAudioEl.onended = null;
-          activeAudioEl = null;
-        }
-        if (activeResolve === resolve) {
-          activeResolve = null;
-          resolve();
-        }
-      }, Math.max(seconds * 1000 + 2000, 4000));
+  function stopAllFiredAudio() {
+    firedAudio.forEach((audio) => {
+      audio.pause();
+      audio.onended = null;
     });
+    firedAudio.clear();
   }
 
-  function clearSafetyTimeout() {
-    if (activeSafetyTimeoutId) {
-      clearTimeout(activeSafetyTimeoutId);
-      activeSafetyTimeoutId = null;
+  function playCueFireAndForget(key) {
+    if (isMuted) return;
+    const audio = audioElements[key];
+    audio.currentTime = 0;
+    firedAudio.add(audio);
+    audio.onended = () => firedAudio.delete(audio);
+    const playPromise = audio.play();
+    if (playPromise && playPromise.catch) {
+      playPromise.catch(() => firedAudio.delete(audio));
     }
   }
 
+  // Fixed-length delay used for the intro->phases pause and for each
+  // breathing phase's own duration. Only Stop cancels this; muting does
+  // not, since phase timing is independent of audio.
+  let delayResolve = null;
+  let delayTimeoutId = null;
+
   function wait(ms) {
     return new Promise((resolve) => {
-      activeResolve = resolve;
-      activeTimeoutId = setTimeout(() => {
-        activeTimeoutId = null;
-        activeResolve = null;
+      delayResolve = resolve;
+      delayTimeoutId = setTimeout(() => {
+        delayTimeoutId = null;
+        delayResolve = null;
         resolve();
       }, ms);
     });
   }
 
-  // Stop button: cancel immediately, we're leaving the screen anyway.
-  function cancelActiveCue() {
-    if (activeAudioEl) {
-      activeAudioEl.pause();
-      activeAudioEl.onended = null;
-      activeAudioEl = null;
+  function cancelDelay() {
+    if (delayTimeoutId) {
+      clearTimeout(delayTimeoutId);
+      delayTimeoutId = null;
     }
-    if (activeTimeoutId) {
-      clearTimeout(activeTimeoutId);
-      activeTimeoutId = null;
-    }
-    clearSafetyTimeout();
-    if (activeResolve) {
-      const resolve = activeResolve;
-      activeResolve = null;
+    if (delayResolve) {
+      const resolve = delayResolve;
+      delayResolve = null;
       resolve();
     }
   }
 
-  // Muting mid-cue: silence audio immediately, but let the visual keep
-  // running to its originally-scheduled moment instead of jump-cutting.
-  function silenceActiveCue() {
-    if (!activeAudioEl) return;
-    activeAudioEl.pause();
-    activeAudioEl.onended = null;
-    activeAudioEl = null;
-    clearSafetyTimeout();
-    const elapsedMs = performance.now() - activePhaseStart;
-    const remainingMs = Math.max(0, activePhaseSeconds * 1000 - elapsedMs);
-    const resolve = activeResolve;
-    activeResolve = null;
-    activeTimeoutId = setTimeout(() => {
-      activeTimeoutId = null;
+  // Intro/outro: these are voiceovers meant to be heard in full, not tied
+  // to a fixed physiological duration, so we wait for the clip to finish
+  // (or a generous safety timeout, or a fixed pause if muted). Tracked
+  // separately from the breathing-phase cues above since these are always
+  // singular (never overlapping) and are awaited rather than fire-and-forget.
+  let awaitedAudioEl = null;
+  let cueResolve = null;
+  let cueTimeoutId = null;
+  let cueSafetyTimeoutId = null;
+
+  function clearCueSafetyTimeout() {
+    if (cueSafetyTimeoutId) {
+      clearTimeout(cueSafetyTimeoutId);
+      cueSafetyTimeoutId = null;
+    }
+  }
+
+  function playAndWait(key) {
+    return new Promise((resolve) => {
+      cueResolve = resolve;
+      if (isMuted) {
+        cueTimeoutId = setTimeout(() => {
+          cueTimeoutId = null;
+          cueResolve = null;
+          resolve();
+        }, (FALLBACK_SECONDS[key] || 3) * 1000);
+        return;
+      }
+      const audio = audioElements[key];
+      awaitedAudioEl = audio;
+      audio.currentTime = 0;
+      audio.onended = () => {
+        awaitedAudioEl = null;
+        clearCueSafetyTimeout();
+        cueResolve = null;
+        resolve();
+      };
+      const playPromise = audio.play();
+      if (playPromise && playPromise.catch) {
+        playPromise.catch(() => {
+          awaitedAudioEl = null;
+          clearCueSafetyTimeout();
+          cueResolve = null;
+          resolve();
+        });
+      }
+      // Safety net in case a browser silently stalls playback and never
+      // fires 'ended'. These are longer voiceover clips, so a generous
+      // fixed ceiling is enough margin without needing to know the exact
+      // expected duration in advance.
+      cueSafetyTimeoutId = setTimeout(() => {
+        cueSafetyTimeoutId = null;
+        if (awaitedAudioEl === audio) {
+          awaitedAudioEl.pause();
+          awaitedAudioEl.onended = null;
+          awaitedAudioEl = null;
+        }
+        if (cueResolve === resolve) {
+          cueResolve = null;
+          resolve();
+        }
+      }, 15000);
+    });
+  }
+
+  function cancelCue() {
+    if (awaitedAudioEl) {
+      awaitedAudioEl.pause();
+      awaitedAudioEl.onended = null;
+      awaitedAudioEl = null;
+    }
+    if (cueTimeoutId) {
+      clearTimeout(cueTimeoutId);
+      cueTimeoutId = null;
+    }
+    clearCueSafetyTimeout();
+    if (cueResolve) {
+      const resolve = cueResolve;
+      cueResolve = null;
       resolve();
-    }, remainingMs);
+    }
   }
 
   // --- UI helpers --------------------------------------------------------
@@ -390,10 +384,10 @@
     phaseLabel.textContent = INTRO_TEXT;
     timerLabel.textContent = '';
 
-    await playCue('intro');
+    await playAndWait('intro');
     if (token !== sessionToken) return;
 
-    await wait(800);
+    await wait(POST_INTRO_PAUSE_MS);
     if (token !== sessionToken) return;
 
     circle.classList.remove('idle');
@@ -409,11 +403,11 @@
     while (token === sessionToken && performance.now() - cycleStart < totalMs) {
       for (let i = 0; i < technique.phases.length; i += 1) {
         const phase = technique.phases[i];
-        const seconds = getCueSeconds(phase.audioKey);
         phaseLabel.textContent = phase.label;
-        circle.style.setProperty('--phase-duration', `${seconds}s`);
+        circle.style.setProperty('--phase-duration', `${phase.seconds}s`);
         circle.className = 'circle' + (phase.circleClass ? ' ' + phase.circleClass : '');
-        await playCue(phase.audioKey);
+        playCueFireAndForget(phase.audioKey);
+        await wait(phase.seconds * 1000);
         if (token !== sessionToken) return;
       }
     }
@@ -425,7 +419,7 @@
     phaseLabel.textContent = OUTRO_TEXT;
     timerLabel.textContent = '';
 
-    await playCue('outro');
+    await playAndWait('outro');
     if (token !== sessionToken) return;
 
     completeSession();
@@ -433,7 +427,9 @@
 
   function stopSession() {
     sessionToken += 1;
-    cancelActiveCue();
+    cancelDelay();
+    cancelCue();
+    stopAllFiredAudio();
     stopCountdownDisplay();
     showScreen(homeScreen);
   }
@@ -454,6 +450,12 @@
     isMuted = !isMuted;
     localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted));
     updateMuteButton();
-    if (isMuted) silenceActiveCue();
+    if (isMuted) {
+      stopAllFiredAudio();
+      // If mid-intro/outro, skip ahead now that there's nothing to hear.
+      // Does not touch delayResolve, so an in-progress breathing phase's
+      // fixed timing is left completely undisturbed.
+      if (cueResolve) cancelCue();
+    }
   });
 })();

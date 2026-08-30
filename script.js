@@ -92,6 +92,7 @@
   let isMuted = localStorage.getItem(MUTE_STORAGE_KEY) === 'true';
   let sessionToken = 0;
   let countdownIntervalId = null;
+  let wakeLock = null;
 
   const audioElements = {};
   Object.keys(AUDIO_FILES).forEach((key) => {
@@ -243,6 +244,41 @@
     }
   }
 
+  // --- Screen wake lock ----------------------------------------------
+  // Keeps the screen from dimming/locking during an active session. Not
+  // supported in every browser, and the browser can revoke it on its own
+  // (e.g. switching apps) — both are handled silently, the app works the
+  // same either way, just without this feature when unavailable.
+
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+      });
+    } catch (err) {
+      wakeLock = null;
+    }
+  }
+
+  async function releaseWakeLock() {
+    if (!wakeLock) return;
+    const lock = wakeLock;
+    wakeLock = null;
+    try {
+      await lock.release();
+    } catch (err) {
+      // Already released or unreleasable — nothing to do.
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !wakeLock && sessionScreen.classList.contains('visible')) {
+      requestWakeLock();
+    }
+  });
+
   // --- UI helpers --------------------------------------------------------
 
   function updateMuteButton() {
@@ -364,6 +400,7 @@
   }
 
   function completeSession() {
+    releaseWakeLock();
     recordStreakCompletion();
     doneMessage.textContent = TECHNIQUES[currentTechniqueId].closing;
     renderStreak(doneStreakLabel);
@@ -383,6 +420,7 @@
     circle.className = 'circle idle';
     phaseLabel.textContent = INTRO_TEXT;
     timerLabel.textContent = '';
+    requestWakeLock();
 
     await playAndWait('intro');
     if (token !== sessionToken) return;
@@ -431,6 +469,7 @@
     cancelCue();
     stopAllFiredAudio();
     stopCountdownDisplay();
+    releaseWakeLock();
     showScreen(homeScreen);
   }
 

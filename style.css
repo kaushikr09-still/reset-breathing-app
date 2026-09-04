@@ -612,15 +612,24 @@ button:focus-visible {
   font-size: 0.9rem;
 }
 
-.insights-stat {
+/* The single most useful takeaway — deliberately the most prominent
+   line on the screen, per the design intent. */
+.insights-highlight {
   margin: 0;
+  max-width: 340px;
   font-family: var(--font-serif);
-  font-size: 1.3rem;
+  font-size: 1.5rem;
   font-weight: 500;
+  line-height: 1.35;
+  color: var(--accent);
 }
 
-.insights-value {
-  color: var(--accent);
+.insights-headline {
+  margin: 0;
+  max-width: 320px;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text);
 }
 
 .insights-breakdown {
@@ -632,18 +641,25 @@ button:focus-visible {
 
 .insights-row {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   padding: var(--space-2) var(--space-3);
   border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  font-size: 0.95rem;
+  text-align: left;
 }
 
-.insights-row-value {
+.insights-row-name {
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.insights-row-phrase {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
   color: var(--accent);
-  font-weight: 600;
 }
 
 .insights-empty,

@@ -600,28 +600,42 @@
     showScreen(homeScreen);
   }
 
+  // Translates a raw average stress-drop number into plain, warm language.
+  // The underlying math is unchanged — only the display is decimal-free
+  // and never shows a signed number, since this should read as relatable
+  // rather than clinical.
+  function phraseForDrop(drop) {
+    if (drop >= 3) return 'Helps you a lot';
+    if (drop >= 1) return 'Helps you feel calmer';
+    if (drop > 0) return 'Helps a little';
+    if (drop === 0) return 'About the same, either way';
+    return 'Not much difference yet';
+  }
+
+  function overallHeadline(drop) {
+    return drop > 0
+      ? 'You usually feel calmer after a session.'
+      : 'Keep going — a few more sessions will show your pattern more clearly.';
+  }
+
   function renderInsights(sessions) {
     const total = sessions.length;
+    insightsContent.innerHTML = '';
+
+    const totalLine = document.createElement('p');
+    totalLine.className = 'insights-total';
+    totalLine.textContent = `You've shown up ${total} time${total === 1 ? '' : 's'}.`;
+    insightsContent.appendChild(totalLine);
+
     if (total < 3) {
-      insightsContent.innerHTML = '';
-      const totalLine = document.createElement('p');
-      totalLine.className = 'insights-total';
-      totalLine.textContent = `${total} session${total === 1 ? '' : 's'} logged`;
       const empty = document.createElement('p');
       empty.className = 'insights-empty';
       empty.textContent = 'Not enough data yet.';
-      insightsContent.appendChild(totalLine);
       insightsContent.appendChild(empty);
       return;
     }
 
     const pairs = sessions.filter((s) => s.stress_before != null && s.stress_after != null);
-    insightsContent.innerHTML = '';
-
-    const totalLine = document.createElement('p');
-    totalLine.className = 'insights-total';
-    totalLine.textContent = `${total} sessions logged`;
-    insightsContent.appendChild(totalLine);
 
     if (pairs.length === 0) {
       const empty = document.createElement('p');
@@ -633,29 +647,54 @@
 
     const avgDrop = (list) => list.reduce((sum, s) => sum + (s.stress_before - s.stress_after), 0) / list.length;
 
-    const overall = document.createElement('p');
-    overall.className = 'insights-stat';
-    overall.innerHTML = `<span class="insights-value">${avgDrop(pairs).toFixed(1)}</span> average stress drop`;
-    insightsContent.appendChild(overall);
-
     const byTechnique = {};
     pairs.forEach((s) => {
       if (!byTechnique[s.technique]) byTechnique[s.technique] = [];
       byTechnique[s.technique].push(s);
     });
+    const techniqueAverages = Object.keys(byTechnique).map((techniqueId) => ({
+      name: TECHNIQUES[techniqueId] ? TECHNIQUES[techniqueId].name : techniqueId,
+      count: byTechnique[techniqueId].length,
+      drop: avgDrop(byTechnique[techniqueId]),
+    }));
+
+    // The single most useful takeaway, but only when it's actually
+    // trustworthy: both techniques being compared need at least 2
+    // sessions each (so one noisy data point can't "win"), and the gap
+    // between the best and next-best needs to be meaningfully large
+    // (not just noise). Otherwise this is skipped entirely rather than
+    // showing a standout claim that contradicts a "keep going" headline.
+    const MIN_SESSIONS_TO_COMPARE = 2;
+    const MIN_MEANINGFUL_GAP = 1.5;
+    const qualifying = techniqueAverages.filter((t) => t.count >= MIN_SESSIONS_TO_COMPARE);
+    if (qualifying.length >= 2) {
+      const sorted = [...qualifying].sort((a, b) => b.drop - a.drop);
+      if (sorted[0].drop - sorted[1].drop >= MIN_MEANINGFUL_GAP) {
+        const highlight = document.createElement('p');
+        highlight.className = 'insights-highlight';
+        highlight.textContent = `${sorted[0].name} works best for you`;
+        insightsContent.appendChild(highlight);
+      }
+    }
+
+    const headline = document.createElement('p');
+    headline.className = 'insights-headline';
+    headline.textContent = overallHeadline(avgDrop(pairs));
+    insightsContent.appendChild(headline);
 
     const breakdown = document.createElement('div');
     breakdown.className = 'insights-breakdown';
-    Object.keys(byTechnique).forEach((techniqueId) => {
+    techniqueAverages.forEach(({ name, drop }) => {
       const row = document.createElement('div');
       row.className = 'insights-row';
-      const name = document.createElement('span');
-      name.textContent = TECHNIQUES[techniqueId] ? TECHNIQUES[techniqueId].name : techniqueId;
-      const value = document.createElement('span');
-      value.className = 'insights-row-value';
-      value.textContent = avgDrop(byTechnique[techniqueId]).toFixed(1);
-      row.appendChild(name);
-      row.appendChild(value);
+      const rowName = document.createElement('span');
+      rowName.className = 'insights-row-name';
+      rowName.textContent = name;
+      const rowPhrase = document.createElement('span');
+      rowPhrase.className = 'insights-row-phrase';
+      rowPhrase.textContent = phraseForDrop(drop);
+      row.appendChild(rowName);
+      row.appendChild(rowPhrase);
       breakdown.appendChild(row);
     });
     insightsContent.appendChild(breakdown);

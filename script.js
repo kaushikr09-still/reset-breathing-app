@@ -373,7 +373,7 @@
         option.appendChild(note);
       }
       option.addEventListener('click', async () => {
-        const stressBefore = await showCheckIn('How wound up are you right now?');
+        const stressBefore = await showCheckIn('How stressed do you feel right now?');
         runSession(techniqueId, minutes, stressBefore);
       });
       durationList.appendChild(option);
@@ -387,7 +387,12 @@
   // resolves with the chosen number, or null if skipped.
   let checkInResolve = null;
 
+  const CHECKIN_END_LABELS = { 1: '1 · Calm', 10: '10 · Very stressed' };
+
   for (let n = 1; n <= 10; n += 1) {
+    const item = document.createElement('div');
+    item.className = 'checkin-item';
+
     const option = document.createElement('button');
     option.type = 'button';
     option.className = 'checkin-option';
@@ -399,7 +404,14 @@
         resolve(n);
       }
     });
-    checkinScale.appendChild(option);
+    item.appendChild(option);
+
+    const label = document.createElement('span');
+    label.className = 'checkin-item-label';
+    if (CHECKIN_END_LABELS[n]) label.textContent = CHECKIN_END_LABELS[n];
+    item.appendChild(label);
+
+    checkinScale.appendChild(item);
   }
 
   checkinSkipBtn.addEventListener('click', () => {

@@ -408,6 +408,25 @@ button:focus-visible {
   max-width: 360px;
 }
 
+.checkin-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.checkin-item-label {
+  display: block;
+  min-height: 2.4em;
+  max-width: 72px;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  line-height: 1.3;
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+
 .checkin-option {
   display: flex;
   align-items: center;

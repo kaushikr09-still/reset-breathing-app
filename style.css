@@ -361,3 +361,132 @@ button:focus-visible {
   line-height: 1.4;
   letter-spacing: 0.01em;
 }
+
+.quiet-link {
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--text-dim);
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+.quiet-link:hover {
+  opacity: 0.9;
+  color: var(--text);
+  transform: none;
+}
+
+.quiet-link:active {
+  opacity: 0.9;
+  transform: scale(0.97);
+}
+
+#insights-link {
+  margin-top: -20px;
+}
+
+.checkin-prompt {
+  margin: 0;
+  max-width: 380px;
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+}
+
+.checkin-scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  max-width: 360px;
+}
+
+.checkin-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.checkin-option:hover {
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+
+.checkin-option:active {
+  transform: scale(0.94);
+  background: var(--surface-hover);
+}
+
+.insights-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  max-width: 380px;
+  width: 100%;
+}
+
+.insights-total {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.insights-stat {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  font-weight: 500;
+}
+
+.insights-value {
+  color: var(--accent);
+}
+
+.insights-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.insights-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+
+.insights-row-value {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.insights-empty,
+.insights-loading {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  opacity: 0.8;
+}

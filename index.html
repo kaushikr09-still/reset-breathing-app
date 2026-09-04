@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <meta name="theme-color" content="#1a211d">
 <link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.js"></script>
 </head>
 <body>
 
@@ -16,6 +17,7 @@
     <h1 class="wordmark">Reset</h1>
     <p class="subtitle">Take a breath. Choose your reset.</p>
     <button id="start-btn" class="btn-primary">Begin</button>
+    <button id="insights-link" class="quiet-link" type="button">Insights</button>
   </main>
 
   <main id="select-screen" class="screen">
@@ -47,6 +49,12 @@
     <div class="duration-list" id="duration-list"></div>
   </main>
 
+  <main id="checkin-screen" class="screen">
+    <p id="checkin-prompt" class="checkin-prompt">How wound up are you right now?</p>
+    <div id="checkin-scale" class="checkin-scale"></div>
+    <button id="checkin-skip-btn" class="quiet-link" type="button">Skip</button>
+  </main>
+
   <main id="session-screen" class="screen">
     <div class="breath-stage">
       <div id="circle" class="circle"></div>
@@ -65,6 +73,12 @@
     <p id="done-message" class="done-message"></p>
     <p id="done-streak-label" class="streak-label hidden"></p>
     <button id="restart-btn" class="btn-primary">Try another</button>
+  </main>
+
+  <main id="insights-screen" class="screen">
+    <button id="insights-back-btn" class="back-link" type="button">&larr; Back</button>
+    <h1 class="screen-title">Insights</h1>
+    <div id="insights-content" class="insights-content"></div>
   </main>
 
   <script src="script.js"></script>

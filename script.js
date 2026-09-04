@@ -60,6 +60,59 @@
   // almost immediately. The shape stays static/idle throughout this pause.
   const POST_INTRO_PAUSE_MS = 2000;
 
+  // --- Supabase ------------------------------------------------------
+  // Anonymous auth + session logging. Entirely best-effort: if Supabase
+  // is unreachable or misconfigured, breathing sessions still run exactly
+  // as before — only the logging/insights layer is affected, silently.
+  const SUPABASE_URL = 'https://uhjoozsoiyylkphujaqb.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVoam9venNvaXl5bGtwaHVqYXFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0OTQ2MjAsImV4cCI6MjEwNDA3MDYyMH0.2-l5bJOm36RatISVOOFwU8Ow5ZIorV3iIH2uWfKnm3I';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Resolved once an anonymous session exists (either restored from a
+  // prior visit, or freshly created). Awaited before any insert/query so
+  // those never race the initial sign-in.
+  const authReady = (async () => {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) {
+        const { error } = await sb.auth.signInAnonymously();
+        if (error) console.warn('Anonymous sign-in failed:', error.message);
+      }
+    } catch (err) {
+      console.warn('Auth check failed:', err);
+    }
+  })();
+
+  async function recordSession(techniqueId, durationSeconds, stressBefore, stressAfter) {
+    try {
+      await authReady;
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) return;
+      const { error } = await sb.from('sessions').insert({
+        user_id: user.id,
+        technique: techniqueId,
+        duration_seconds: durationSeconds,
+        stress_before: stressBefore,
+        stress_after: stressAfter,
+      });
+      if (error) console.warn('Could not record session:', error.message);
+    } catch (err) {
+      console.warn('Could not record session:', err);
+    }
+  }
+
+  async function fetchSessions() {
+    await authReady;
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await sb
+      .from('sessions')
+      .select('technique, stress_before, stress_after')
+      .eq('user_id', user.id);
+    if (error) throw error;
+    return data || [];
+  }
+
   const MUTE_STORAGE_KEY = 'boxBreathMuted';
   const STREAK_STORAGE_KEY = 'boxBreathStreak';
   const ORDINAL_WORDS = [
@@ -87,6 +140,14 @@
   const durationList = document.getElementById('duration-list');
   const selectBackBtn = document.getElementById('select-back-btn');
   const durationBackBtn = document.getElementById('duration-back-btn');
+  const insightsLink = document.getElementById('insights-link');
+  const checkinScreen = document.getElementById('checkin-screen');
+  const checkinPrompt = document.getElementById('checkin-prompt');
+  const checkinScale = document.getElementById('checkin-scale');
+  const checkinSkipBtn = document.getElementById('checkin-skip-btn');
+  const insightsScreen = document.getElementById('insights-screen');
+  const insightsBackBtn = document.getElementById('insights-back-btn');
+  const insightsContent = document.getElementById('insights-content');
 
   let currentTechniqueId = 'box';
   let isMuted = localStorage.getItem(MUTE_STORAGE_KEY) === 'true';
@@ -288,7 +349,7 @@
   }
 
   function showScreen(screen) {
-    [homeScreen, selectScreen, durationScreen, sessionScreen, doneScreen].forEach((s) => s.classList.remove('visible'));
+    [homeScreen, selectScreen, durationScreen, checkinScreen, sessionScreen, doneScreen, insightsScreen].forEach((s) => s.classList.remove('visible'));
     screen.classList.add('visible');
   }
 
@@ -311,10 +372,50 @@
         note.textContent = 'Usual length';
         option.appendChild(note);
       }
-      option.addEventListener('click', () => runSession(techniqueId, minutes));
+      option.addEventListener('click', async () => {
+        const stressBefore = await showCheckIn('How wound up are you right now?');
+        runSession(techniqueId, minutes, stressBefore);
+      });
       durationList.appendChild(option);
     });
     showScreen(durationScreen);
+  }
+
+  // A quiet, always-skippable 1-10 stress check-in, shown before a session
+  // starts and again after it ends. Tapping a number both answers and
+  // advances — there's no separate submit step. Returns a promise that
+  // resolves with the chosen number, or null if skipped.
+  let checkInResolve = null;
+
+  for (let n = 1; n <= 10; n += 1) {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = 'checkin-option';
+    option.textContent = String(n);
+    option.addEventListener('click', () => {
+      if (checkInResolve) {
+        const resolve = checkInResolve;
+        checkInResolve = null;
+        resolve(n);
+      }
+    });
+    checkinScale.appendChild(option);
+  }
+
+  checkinSkipBtn.addEventListener('click', () => {
+    if (checkInResolve) {
+      const resolve = checkInResolve;
+      checkInResolve = null;
+      resolve(null);
+    }
+  });
+
+  function showCheckIn(promptText) {
+    return new Promise((resolve) => {
+      checkInResolve = resolve;
+      checkinPrompt.textContent = promptText;
+      showScreen(checkinScreen);
+    });
   }
 
   function dateKey(date) {
@@ -399,9 +500,10 @@
     }
   }
 
-  function completeSession() {
+  function completeSession(durationSeconds, stressBefore, stressAfter) {
     releaseWakeLock();
     recordStreakCompletion();
+    recordSession(currentTechniqueId, durationSeconds, stressBefore, stressAfter);
     doneMessage.textContent = TECHNIQUES[currentTechniqueId].closing;
     renderStreak(doneStreakLabel);
     showScreen(doneScreen);
@@ -411,7 +513,7 @@
   // Sequence: static idle -> intro -> brief pause -> breathing cycles for
   // the chosen duration -> static idle -> outro -> completion screen.
 
-  async function runSession(techniqueId, minutes) {
+  async function runSession(techniqueId, minutes, stressBefore) {
     const token = ++sessionToken;
     currentTechniqueId = techniqueId;
     const technique = TECHNIQUES[techniqueId];
@@ -449,6 +551,7 @@
         if (token !== sessionToken) return;
       }
     }
+    const durationSeconds = Math.round((performance.now() - cycleStart) / 1000);
     stopCountdownDisplay();
     if (token !== sessionToken) return;
 
@@ -460,7 +563,10 @@
     await playAndWait('outro');
     if (token !== sessionToken) return;
 
-    completeSession();
+    const stressAfter = await showCheckIn('How do you feel now?');
+    if (token !== sessionToken) return;
+
+    completeSession(durationSeconds, stressBefore, stressAfter);
   }
 
   function stopSession() {
@@ -471,6 +577,78 @@
     stopCountdownDisplay();
     releaseWakeLock();
     showScreen(homeScreen);
+  }
+
+  function renderInsights(sessions) {
+    const total = sessions.length;
+    if (total < 3) {
+      insightsContent.innerHTML = '';
+      const totalLine = document.createElement('p');
+      totalLine.className = 'insights-total';
+      totalLine.textContent = `${total} session${total === 1 ? '' : 's'} logged`;
+      const empty = document.createElement('p');
+      empty.className = 'insights-empty';
+      empty.textContent = 'Not enough data yet.';
+      insightsContent.appendChild(totalLine);
+      insightsContent.appendChild(empty);
+      return;
+    }
+
+    const pairs = sessions.filter((s) => s.stress_before != null && s.stress_after != null);
+    insightsContent.innerHTML = '';
+
+    const totalLine = document.createElement('p');
+    totalLine.className = 'insights-total';
+    totalLine.textContent = `${total} sessions logged`;
+    insightsContent.appendChild(totalLine);
+
+    if (pairs.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'insights-empty';
+      empty.textContent = 'No stress check-ins recorded yet.';
+      insightsContent.appendChild(empty);
+      return;
+    }
+
+    const avgDrop = (list) => list.reduce((sum, s) => sum + (s.stress_before - s.stress_after), 0) / list.length;
+
+    const overall = document.createElement('p');
+    overall.className = 'insights-stat';
+    overall.innerHTML = `<span class="insights-value">${avgDrop(pairs).toFixed(1)}</span> average stress drop`;
+    insightsContent.appendChild(overall);
+
+    const byTechnique = {};
+    pairs.forEach((s) => {
+      if (!byTechnique[s.technique]) byTechnique[s.technique] = [];
+      byTechnique[s.technique].push(s);
+    });
+
+    const breakdown = document.createElement('div');
+    breakdown.className = 'insights-breakdown';
+    Object.keys(byTechnique).forEach((techniqueId) => {
+      const row = document.createElement('div');
+      row.className = 'insights-row';
+      const name = document.createElement('span');
+      name.textContent = TECHNIQUES[techniqueId] ? TECHNIQUES[techniqueId].name : techniqueId;
+      const value = document.createElement('span');
+      value.className = 'insights-row-value';
+      value.textContent = avgDrop(byTechnique[techniqueId]).toFixed(1);
+      row.appendChild(name);
+      row.appendChild(value);
+      breakdown.appendChild(row);
+    });
+    insightsContent.appendChild(breakdown);
+  }
+
+  async function loadInsights() {
+    insightsContent.innerHTML = '<p class="insights-loading">Loading&hellip;</p>';
+    try {
+      const sessions = await fetchSessions();
+      renderInsights(sessions);
+    } catch (err) {
+      console.warn('Could not load insights:', err);
+      insightsContent.innerHTML = '<p class="insights-empty">Could not load insights right now.</p>';
+    }
   }
 
   // --- Wiring --------------------------------------------------------
@@ -485,6 +663,11 @@
     card.addEventListener('click', () => showDurationScreen(card.dataset.technique));
   });
   stopBtn.addEventListener('click', stopSession);
+  insightsLink.addEventListener('click', () => {
+    showScreen(insightsScreen);
+    loadInsights();
+  });
+  insightsBackBtn.addEventListener('click', () => showScreen(homeScreen));
   muteBtn.addEventListener('click', () => {
     isMuted = !isMuted;
     localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted));

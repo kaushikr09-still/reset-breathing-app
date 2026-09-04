@@ -12,6 +12,22 @@
 
   --font-serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Hand-tuned organic curve — fast-ish settle with a long, soft tail,
+     used for breathing motion, screen transitions, and tap feedback so
+     everything in the app shares one consistent sense of "weight". */
+  --ease-organic: cubic-bezier(0.16, 0.84, 0.32, 1);
+
+  /* 8px-based vertical rhythm, applied to spacing between text/elements
+     so gaps read as intentional rather than per-screen guesswork. */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 48px;
+
+  --phase-duration: 4s;
 }
 
 * {
@@ -29,6 +45,78 @@ body {
   color: var(--text);
   font-family: var(--font-sans);
   text-align: center;
+  overflow-x: hidden;
+}
+
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambient-orb-wrap {
+  position: absolute;
+  will-change: transform;
+}
+
+.ambient-orb-wrap-1 {
+  width: 44vmax;
+  height: 44vmax;
+  top: -28vmax;
+  left: -26vmax;
+  animation: ambientDrift1 28s var(--ease-organic) infinite alternate;
+}
+
+.ambient-orb-wrap-2 {
+  width: 40vmax;
+  height: 40vmax;
+  bottom: -27vmax;
+  right: -25vmax;
+  animation: ambientDrift2 34s var(--ease-organic) infinite alternate;
+}
+
+.ambient-orb {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  filter: blur(75px);
+  transform: scale(1);
+  transition: transform var(--phase-duration, 4s) var(--ease-organic);
+}
+
+body.breathing-expand .ambient-orb {
+  transform: scale(1.045);
+}
+
+.ambient-orb-wrap-1 .ambient-orb {
+  background: radial-gradient(circle closest-side at 42% 40%, rgba(227, 164, 88, 0.32), transparent);
+}
+
+.ambient-orb-wrap-2 .ambient-orb {
+  background: radial-gradient(circle closest-side at 58% 60%, rgba(147, 166, 154, 0.24), transparent);
+}
+
+@keyframes ambientDrift1 {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(4vmax, 3vmax); }
+}
+
+@keyframes ambientDrift2 {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(-3vmax, -4vmax); }
+}
+
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
 h1 {
@@ -40,23 +128,24 @@ h1 {
 .screen {
   position: fixed;
   inset: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 36px;
-  padding: 32px;
+  gap: var(--space-5);
+  padding: var(--space-4);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.7s ease-in-out, visibility 0s linear 0.7s;
+  transition: opacity 0.7s var(--ease-organic), visibility 0s linear 0.7s;
 }
 
 .screen.visible {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transition: opacity 0.7s ease-in-out, visibility 0s linear 0s;
+  transition: opacity 0.7s var(--ease-organic), visibility 0s linear 0s;
 }
 
 .back-link {
@@ -105,6 +194,35 @@ h1 {
   line-height: 1.5;
 }
 
+/* One-time hero reveal for the home screen's title and subtitle. A plain
+   CSS animation (not tied to .screen.visible) only plays once, at first
+   paint — it does not replay when navigating back to the home screen
+   later, since these elements are never removed from the DOM. */
+#home-screen .wordmark,
+#home-screen .subtitle {
+  opacity: 0;
+  animation: heroReveal 1.3s var(--ease-organic) both;
+}
+
+#home-screen .wordmark {
+  animation-delay: 0.1s;
+}
+
+#home-screen .subtitle {
+  animation-delay: 0.4s;
+}
+
+@keyframes heroReveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .streak-label {
   color: var(--text-dim);
   margin: 0;
@@ -120,7 +238,7 @@ button {
   font-family: var(--font-sans);
   font-size: 1.05rem;
   font-weight: 600;
-  padding: 15px 38px;
+  padding: var(--space-2) var(--space-5);
   border-radius: 999px;
   border: none;
   cursor: pointer;
@@ -129,13 +247,17 @@ button {
   user-select: none;
   touch-action: manipulation;
   outline: none;
-  transition: transform 0.35s ease-in-out, background-color 0.35s ease-in-out,
-              border-color 0.35s ease-in-out, color 0.35s ease-in-out,
-              box-shadow 0.35s ease-in-out;
+  transition: transform 0.35s var(--ease-organic), opacity 0.35s var(--ease-organic),
+              background-color 0.35s var(--ease-organic), border-color 0.35s var(--ease-organic),
+              color 0.35s var(--ease-organic), box-shadow 0.35s var(--ease-organic);
 }
 
+/* Shared gentle scale-and-opacity tap feedback for every button and
+   card in the app (technique cards and duration options are <button>
+   elements too, so this single rule covers them without repetition). */
 button:active {
   transform: scale(0.97);
+  opacity: 0.88;
 }
 
 button:focus-visible {
@@ -164,7 +286,7 @@ button:focus-visible {
   color: var(--text-dim);
   border: 1px solid var(--border);
   font-size: 0.95rem;
-  padding: 13px 30px;
+  padding: var(--space-2) var(--space-4);
 }
 
 .btn-ghost:hover {
@@ -186,7 +308,7 @@ button:focus-visible {
 .technique-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-2);
   width: 100%;
   max-width: 420px;
 }
@@ -195,9 +317,9 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 5px;
+  gap: var(--space-1);
   width: 100%;
-  padding: 20px 24px;
+  padding: var(--space-3);
   border-radius: 18px;
   text-align: left;
   background: var(--surface);
@@ -242,7 +364,7 @@ button:focus-visible {
 
 .duration-list {
   display: flex;
-  gap: 14px;
+  gap: var(--space-2);
   flex-wrap: wrap;
   justify-content: center;
 }
@@ -251,9 +373,9 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 108px;
-  padding: 18px 20px;
+  padding: var(--space-2) var(--space-3);
   border-radius: 16px;
   background: transparent;
   border: 1px solid var(--border);
@@ -303,7 +425,7 @@ button:focus-visible {
   border: 2px solid var(--accent);
   box-shadow: 0 0 46px rgba(227, 164, 88, 0.22);
   transform: scale(1);
-  transition: transform var(--phase-duration) cubic-bezier(0.45, 0, 0.55, 1);
+  transition: transform var(--phase-duration) var(--ease-organic);
 }
 
 .circle.expand {
@@ -327,7 +449,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-1);
 }
 
 .phase-label {
@@ -346,10 +468,32 @@ button:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* A single floating, semi-transparent pill housing both controls,
+   anchored near the bottom of the session screen instead of sitting
+   inline with the breathing shape and timer. */
 .controls {
+  position: absolute;
+  left: 50%;
+  bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(26, 33, 29, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+.controls .btn-ghost {
+  border: none;
+  padding: 9px 16px;
+  font-size: 0.78rem;
+  font-weight: 500;
 }
 
 .done-message {
@@ -403,7 +547,7 @@ button:focus-visible {
 .checkin-scale {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-1);
   justify-content: center;
   max-width: 360px;
 }
@@ -412,7 +556,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .checkin-item-label {
@@ -457,7 +601,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: var(--space-2);
   max-width: 380px;
   width: 100%;
 }
@@ -482,7 +626,7 @@ button:focus-visible {
 .insights-breakdown {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-1);
   width: 100%;
 }
 
@@ -490,7 +634,7 @@ button:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding: 12px 18px;
+  padding: var(--space-2) var(--space-3);
   border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--border);

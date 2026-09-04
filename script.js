@@ -532,6 +532,7 @@
 
     showScreen(sessionScreen);
     circle.className = 'circle idle';
+    document.body.classList.remove('breathing-expand');
     phaseLabel.textContent = INTRO_TEXT;
     timerLabel.textContent = '';
     requestWakeLock();
@@ -558,6 +559,12 @@
         phaseLabel.textContent = phase.label;
         circle.style.setProperty('--phase-duration', `${phase.seconds}s`);
         circle.className = 'circle' + (phase.circleClass ? ' ' + phase.circleClass : '');
+        // Mirror the same phase state onto <body>, purely so the ambient
+        // background (a separate element, not a descendant of the circle)
+        // can pulse in sync too. Purely presentational — doesn't affect
+        // circle/audio timing.
+        document.body.style.setProperty('--phase-duration', `${phase.seconds}s`);
+        document.body.classList.toggle('breathing-expand', !!phase.circleClass);
         playCueFireAndForget(phase.audioKey);
         await wait(phase.seconds * 1000);
         if (token !== sessionToken) return;
@@ -568,6 +575,7 @@
     if (token !== sessionToken) return;
 
     circle.className = 'circle idle';
+    document.body.classList.remove('breathing-expand');
     void circle.offsetWidth;
     phaseLabel.textContent = OUTRO_TEXT;
     timerLabel.textContent = '';
@@ -588,6 +596,7 @@
     stopAllFiredAudio();
     stopCountdownDisplay();
     releaseWakeLock();
+    document.body.classList.remove('breathing-expand');
     showScreen(homeScreen);
   }
 

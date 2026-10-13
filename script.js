@@ -72,12 +72,15 @@
   // as before — only the logging/insights layer is affected, silently.
   const SUPABASE_URL = 'https://uhjoozsoiyylkphujaqb.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVoam9venNvaXl5bGtwaHVqYXFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0OTQ2MjAsImV4cCI6MjEwNDA3MDYyMH0.2-l5bJOm36RatISVOOFwU8Ow5ZIorV3iIH2uWfKnm3I';
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // The Supabase library is loaded from a CDN. If that script is blocked or
+  // fails to load, the client stays null and everything below skips quietly.
+  const sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
   // Resolved once an anonymous session exists (either restored from a
   // prior visit, or freshly created). Awaited before any insert/query so
   // those never race the initial sign-in.
   const authReady = (async () => {
+    if (!sb) return;
     try {
       const { data: { session } } = await sb.auth.getSession();
       if (!session) {
@@ -90,6 +93,7 @@
   })();
 
   async function recordSession(techniqueId, durationSeconds, stressBefore, stressAfter) {
+    if (!sb) return;
     try {
       await authReady;
       const { data: { user } } = await sb.auth.getUser();
@@ -108,6 +112,8 @@
   }
 
   async function fetchSessions() {
+    // No client: let loadInsights show its existing "could not load" message.
+    if (!sb) throw new Error('Supabase is not available');
     await authReady;
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return [];

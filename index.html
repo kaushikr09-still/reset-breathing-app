@@ -82,7 +82,15 @@
   <main id="done-screen" class="screen">
     <p id="done-message" class="done-message"></p>
     <p id="done-streak-label" class="streak-label hidden"></p>
-    <button id="restart-btn" class="btn-primary">Try another</button>
+    <div class="done-actions">
+      <button id="restart-btn" class="btn-primary">Try another</button>
+      <button id="done-progress-btn" class="btn-ghost" type="button">Your progress</button>
+    </div>
+    <div id="install-hint" class="install-hint" hidden>
+      <p id="install-hint-text" class="install-hint-text"></p>
+      <button id="install-hint-add" class="install-hint-add" type="button">Add</button>
+      <button id="install-hint-dismiss" class="install-hint-dismiss" type="button" aria-label="Dismiss">&times;</button>
+    </div>
   </main>
 
   <main id="insights-screen" class="screen">

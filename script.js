@@ -135,6 +135,11 @@
   const startBtn = document.getElementById('start-btn');
   const stopBtn = document.getElementById('stop-btn');
   const restartBtn = document.getElementById('restart-btn');
+  const doneProgressBtn = document.getElementById('done-progress-btn');
+  const installHint = document.getElementById('install-hint');
+  const installHintText = document.getElementById('install-hint-text');
+  const installHintAdd = document.getElementById('install-hint-add');
+  const installHintDismiss = document.getElementById('install-hint-dismiss');
   const circle = document.getElementById('circle');
   const phaseLabel = document.getElementById('phase-label');
   const timerLabel = document.getElementById('timer-label');
@@ -509,12 +514,181 @@
     }
   }
 
+  // --- Final screen: before/after result and day count ---------------------
+  // Display only. The two ratings arrive as arguments for the session that
+  // just ended, so nothing is held between sessions and nothing extra is
+  // saved. If anything here fails, the screen keeps the existing text.
+
+  function pointsWord(n) {
+    return n === 1 ? 'point' : 'points';
+  }
+
+  function buildResult(before, after) {
+    const valid = (v) => Number.isInteger(v) && v >= 1 && v <= 10;
+    if (!valid(before) || !valid(after)) return { text: 'Well done.' };
+    if (after < before) {
+      const n = before - after;
+      return {
+        text: `${before} → ${after}. Stress down ${n} ${pointsWord(n)}.`,
+        spoken: `Stress went from ${before} to ${after}. Stress down ${n} ${pointsWord(n)}.`,
+      };
+    }
+    if (after <= 2) return { text: `Already calm at ${after}. Nicely done.` };
+    if (after === before) return { text: `Steady at ${after}. A second round can help.` };
+    const n = after - before;
+    return {
+      text: `${before} → ${after}. Stress up ${n} ${pointsWord(n)}. Some days take two rounds.`,
+      spoken: `Stress went from ${before} to ${after}. Stress up ${n} ${pointsWord(n)}. Some days take two rounds.`,
+    };
+  }
+
+  function renderResultLine(before, after) {
+    const result = buildResult(before, after);
+    const fragment = document.createDocumentFragment();
+    if (result.spoken) {
+      // Sighted users see the arrow; screen readers hear it in words.
+      const visual = document.createElement('span');
+      visual.setAttribute('aria-hidden', 'true');
+      visual.textContent = result.text;
+      const spoken = document.createElement('span');
+      spoken.className = 'sr-only';
+      spoken.textContent = result.spoken;
+      fragment.appendChild(visual);
+      fragment.appendChild(spoken);
+    } else {
+      fragment.appendChild(document.createTextNode(result.text));
+    }
+    doneMessage.replaceChildren(fragment);
+  }
+
+  // The day count already includes the session that just finished,
+  // because recordStreakCompletion() runs first. Falls back to the
+  // existing streak line if the stored value isn't usable.
+  function renderDayCount(label) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(STREAK_STORAGE_KEY) || 'null');
+      if (stored && stored.date === dateKey(new Date()) && Number.isInteger(stored.streak) && stored.streak >= 1) {
+        label.textContent = `Day ${stored.streak} · Come back tomorrow.`;
+        label.classList.remove('hidden');
+        return;
+      }
+    } catch (err) {
+      // fall through to the existing line
+    }
+    try {
+      renderStreak(label);
+    } catch (err) {
+      label.classList.add('hidden');
+    }
+  }
+
+  // --- Final screen: "add to home screen" hint ----------------------------
+  // Shown only on the final screen of a completed session. Android: only if
+  // the browser's install event was captured. iPhone Safari: a text
+  // instruction. Everything else (desktop, other iPhone browsers, an
+  // already-installed app) shows nothing. No service worker is involved.
+
+  const INSTALL_HINT_KEY = 'reset_install_hint_done';
+  let deferredInstallPrompt = null;
+  let installHintDone = false; // in-memory backup if storage is blocked
+
+  // User agent and install state are read at the moment they are needed.
+  function isAndroidPhone() {
+    return /Android/i.test(navigator.userAgent || '');
+  }
+
+  function isIphoneSafari() {
+    const ua = navigator.userAgent || '';
+    return /iPhone/.test(ua) && /Version\/\d/.test(ua) && /Safari\//.test(ua)
+      && !/(CriOS|FxiOS|EdgiOS|OPiOS|OPT\/|GSA\/|DuckDuckGo|YaBrowser)/.test(ua);
+  }
+
+  function isRunningInstalled() {
+    return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  }
+
+  function isInstallHintDone() {
+    if (installHintDone) return true;
+    try {
+      return localStorage.getItem(INSTALL_HINT_KEY) === '1';
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function markInstallHintDone() {
+    installHintDone = true;
+    try {
+      localStorage.setItem(INSTALL_HINT_KEY, '1');
+    } catch (err) {
+      // storage blocked: the in-memory flag still covers this visit
+    }
+  }
+
+  // Keep the install event as soon as the page loads (Android only).
+  window.addEventListener('beforeinstallprompt', (event) => {
+    if (!isAndroidPhone()) return;
+    event.preventDefault();
+    deferredInstallPrompt = event;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    markInstallHintDone();
+    deferredInstallPrompt = null;
+    installHint.hidden = true;
+  });
+
+  installHintAdd.addEventListener('click', () => {
+    const promptEvent = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    markInstallHintDone();
+    installHint.hidden = true;
+    try {
+      if (promptEvent) promptEvent.prompt();
+    } catch (err) {
+      // nothing to do: the hint is already marked done
+    }
+  });
+
+  installHintDismiss.addEventListener('click', () => {
+    markInstallHintDone();
+    installHint.hidden = true;
+  });
+
+  function renderInstallHint() {
+    installHint.hidden = true;
+    try {
+      if (isInstallHintDone() || isRunningInstalled()) return;
+      let mode = null;
+      if (isAndroidPhone() && deferredInstallPrompt) mode = 'android';
+      else if (isIphoneSafari()) mode = 'ios';
+      if (!mode) return;
+      installHintText.textContent = mode === 'android'
+        ? 'Want Reset one tap away? Add it to your home screen.'
+        : 'Want Reset one tap away? Tap Share, then Add to Home Screen.';
+      installHintAdd.hidden = mode !== 'android';
+      installHint.hidden = false;
+    } catch (err) {
+      installHint.hidden = true;
+    }
+  }
+
   function completeSession(durationSeconds, stressBefore, stressAfter) {
     releaseWakeLock();
     recordStreakCompletion();
     recordSession(currentTechniqueId, durationSeconds, stressBefore, stressAfter);
     doneMessage.textContent = TECHNIQUES[currentTechniqueId].closing;
-    renderStreak(doneStreakLabel);
+    try {
+      renderResultLine(stressBefore, stressAfter);
+    } catch (err) {
+      // keep the existing closing line
+    }
+    renderDayCount(doneStreakLabel);
+    try {
+      renderInstallHint();
+    } catch (err) {
+      // no hint is fine
+    }
     showScreen(doneScreen);
   }
 
@@ -736,6 +910,8 @@
 
   startBtn.addEventListener('click', () => showScreen(selectScreen));
   restartBtn.addEventListener('click', () => showScreen(selectScreen));
+  // Opens the progress screen through the home screen link's existing handler.
+  doneProgressBtn.addEventListener('click', () => insightsLink.click());
   selectBackBtn.addEventListener('click', () => showScreen(homeScreen));
   durationBackBtn.addEventListener('click', () => showScreen(selectScreen));
   techniqueCards.forEach((card) => {

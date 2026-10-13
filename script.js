@@ -387,12 +387,7 @@
   // resolves with the chosen number, or null if skipped.
   let checkInResolve = null;
 
-  const CHECKIN_END_LABELS = { 1: '1 · Calm', 10: '10 · Very stressed' };
-
   for (let n = 1; n <= 10; n += 1) {
-    const item = document.createElement('div');
-    item.className = 'checkin-item';
-
     const option = document.createElement('button');
     option.type = 'button';
     option.className = 'checkin-option';
@@ -404,14 +399,7 @@
         resolve(n);
       }
     });
-    item.appendChild(option);
-
-    const label = document.createElement('span');
-    label.className = 'checkin-item-label';
-    if (CHECKIN_END_LABELS[n]) label.textContent = CHECKIN_END_LABELS[n];
-    item.appendChild(label);
-
-    checkinScale.appendChild(item);
+    checkinScale.appendChild(option);
   }
 
   checkinSkipBtn.addEventListener('click', () => {
@@ -530,6 +518,7 @@
     currentTechniqueId = techniqueId;
     const technique = TECHNIQUES[techniqueId];
 
+    sessionScreen.classList.remove('is-ending');
     showScreen(sessionScreen);
     circle.className = 'circle idle';
     document.body.classList.remove('breathing-expand');
@@ -577,6 +566,8 @@
     circle.className = 'circle idle';
     document.body.classList.remove('breathing-expand');
     void circle.offsetWidth;
+    // Session is over: hide Stop/Mute while the closing line plays.
+    sessionScreen.classList.add('is-ending');
     phaseLabel.textContent = OUTRO_TEXT;
     timerLabel.textContent = '';
 

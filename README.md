@@ -1,77 +1,98 @@
 # Reset
 
-Reset is a guided breathing web app for calming down or refocusing in a few minutes. It offers three research-backed breathing techniques, each paced with real voice narration and precise, technique-correct timing. There are no accounts and no notifications — the app does nothing until it's opened, and asks nothing of the user beyond a few minutes of attention. Session data (technique, duration, and optional stress ratings) is stored in a per-user database via anonymous authentication, so nothing is tied to an identity. That data does leave the device to power the Insights feature.
+Reset is a free, ad-free guided breathing app with three exercises:
+
+- **Calm down** — for when stress spikes
+- **Focus** — before an exam, a meeting or a big call
+- **Sleep** — to ease into rest
+
+No sign-up. Live at **https://getreset.vercel.app**
 
 ## How This Was Built
 
 Reset was built end-to-end using Claude Code as an AI pair-programmer, by someone with no prior coding experience. Development was iterative: features were implemented, tested through real usage on desktop and mobile, and debugged based on that direct testing rather than assumed correctness.
 
-## Why
+## How the app flows
 
-Reset is built around a small set of deliberate constraints rather than a growing feature list.
+1. **Home** — the title, a short tagline, a **Begin** button, and two quiet links: **Your progress** and **About**.
+2. **What do you need right now?** — choose Calm down, Focus or Sleep.
+3. **How long do you have?** — Calm down: 1 or 5 minutes. Focus and Sleep: 2, 4 or 8 minutes. Each length has a short caption (Quick, Recommended, Deep).
+4. **Stress check-in (before)** — rate how stressed you feel, 1 to 10, or skip it.
+5. **Guided session** — a spoken intro, then the breathing cycles with a circle that grows and shrinks, a countdown, and Stop and Mute buttons. A short closing line ends it.
+6. **Stress check-in (after)** — rate how you feel now, or skip it.
+7. **Finish screen** — your before and after ratings in plain words, "Day N · Come back tomorrow.", **Try another** and **Your progress** buttons, and, where it applies, a hint to add Reset to your home screen.
+8. **Your progress** — a short plain-language summary of your own sessions.
+9. **About** — what Reset is, how data is handled, and a note that it is not medical advice.
 
-- **Three techniques, chosen for evidence, not novelty.** Box Breath (used in military and athletic training for steadiness), the 4-7-8 method ("The Wind-Down," commonly recommended for sleep), and the physiological sigh ("The Instant Calm," backed by Stanford research on rapid stress reduction) cover the range of situations someone might reach for a breathing exercise. Each technique's phase durations are fixed to what the technique actually specifies, not to how long a given audio clip happens to run.
-- **No accounts.** There's no email, password, or sign-up screen, ever. Session data — technique, duration, and optional stress ratings — is stored in a per-user database via anonymous authentication, so it's never tied to an identity, even though it does leave the device to power Insights. Streak count and mute preference stay local to the browser.
-- **No push notifications.** Reset does not attempt to bring anyone back. It sits still until it's opened.
-- **Calm by design.** A single accent color, generous whitespace, serif titles, and slow crossfade transitions keep the interface itself from becoming another source of stimulation. Nothing on the page competes for attention with the breathing.
+Stopping a session early returns to the home screen. Nothing is saved for a session that was stopped.
 
-## Tech Stack
+## Features
 
-Reset is intentionally dependency-free:
+- **Narration with fixed timing.** Seven short voice clips (an intro, an outro, and one per breathing phase) were generated with [ElevenLabs](https://elevenlabs.io). How long each phase lasts is set by the technique, not by how long a clip plays:
+  - Calm down: breathe in 4s, a short extra breath in 1.5s, breathe out 8s (13.5s per cycle)
+  - Focus: in 4s, hold 4s, out 4s, hold 4s (16s per cycle)
+  - Sleep: in 4s, hold 7s, out 8s (19s per cycle)
 
-- **HTML, CSS, and vanilla JavaScript** — no framework, no bundler, no build step
-- **Static hosting on [Vercel](https://vercel.com)**, deployed automatically on every push to `main`
-- **Web Audio via native `<audio>` elements** for narration playback
-- **[ElevenLabs](https://elevenlabs.io)** to generate the narration audio itself — real, natural-sounding voice rather than robotic browser text-to-speech
-- **Web Wake Lock API** (`navigator.wakeLock`) to keep the screen awake during a session, with graceful degradation where unsupported
-- **`localStorage`** for streak tracking and mute preference — state that stays local to the browser
-- **[Supabase](https://supabase.com)** for anonymous authentication and a lightweight per-user Postgres database, recording session history and powering Insights
-- **A PWA manifest and icon set** for home-screen installation as a standalone app
+  A cycle that has started always finishes, so a session can run a little past its chosen length.
+- **Mute.** Narration can be muted during a session. The choice is remembered on the device.
+- **Installable.** A web app manifest and icons let you add Reset to your home screen and open it full screen. There is **no service worker, on purpose**, so there is no offline mode.
+- **Add-to-home-screen hint.** After a finished session, Android Chrome shows an **Add** button, but only if the browser offers its install prompt (this is not guaranteed). iPhone Safari shows a line explaining Share → Add to Home Screen. Other browsers, and the installed app, show nothing. Dismissing or installing hides it for good.
+- **Screen stays on.** The Wake Lock API keeps the screen awake during a session, where the browser supports it. If it does not, nothing breaks.
+- **Daily streak, stored on the device.** Finishing a session on the same day keeps the streak, finishing on the next day adds one, and a gap resets it to one. It appears only on the finish screen, as "Day N".
 
-## Architecture
+## Backend and privacy (Supabase)
 
-### Screens
+Reset uses [Supabase](https://supabase.com) for one job: saving finished sessions so the progress screen can show them.
 
-The app is a single `index.html` page with five screens (`home`, `select`, `duration`, `session`, `done`), each a `<main>` element toggled via a `.visible` class for a crossfade transition. All screen logic — navigation, state, and rendering — lives in `script.js`; there is no router and no separate page loads.
+**What is collected, per finished session:**
 
-### Audio and timing
+- an anonymous user ID
+- the exercise (stored as `sigh` for Calm down, `box` for Focus, `478` for Sleep)
+- the session length in seconds
+- your before and after stress ratings (1–10), or empty if you skipped them
+- a timestamp
 
-Each technique is defined as a fixed sequence of phases (e.g. Box Breath: inhale 4s, hold 4s, exhale 4s, hold 4s — a 16-second cycle). Phase duration is driven entirely by these fixed, technique-correct values, independent of how long the corresponding voice clip takes to play. This was a deliberate design decision: earlier versions derived phase timing from audio clip length, which meant pacing varied with narration length rather than reflecting the actual technique.
+**What is not collected:** a name or an email. There are no accounts, no passwords and no sign-in screen. The page includes no analytics or ad scripts.
 
-Audio plays in two distinct modes:
+**How it works:**
 
-- **Fire-and-forget cues** (each breathing phase's narration) play once per phase, every cycle, for the full session. They never block or influence phase timing, and a clip is always allowed to finish naturally even if it runs slightly past its phase's fixed boundary.
-- **Awaited narration** (session intro and outro) is played in full before the app proceeds, since these are meant to be heard start to finish, with a safety timeout in case playback stalls.
+- **Anonymous sign-in.** On load, the app asks Supabase for an anonymous session. The browser keeps it, so the same ID comes back on later visits. A different browser or device gets a different ID.
+- **One table, `sessions`.** Each user can only read and add their own rows, enforced by row-level security. The table and its policies are set up in the Supabase dashboard, not in this repository.
+- **Public key in the code.** `script.js` contains Supabase's public (anon) key, which is meant to be public. Row-level security is what protects the data.
+- **Best effort.** If Supabase cannot be reached, a session still runs. It just is not saved.
 
-A session is driven by an async state machine (`runSession`) using a cancellation token that increments on every new session start or manual stop, checked after every await, so a stale session can never continue running or racing a new one.
+**Your progress screen.** It shows how many sessions you have finished. After three sessions it adds a short summary: whether you usually feel calmer afterwards, and for each exercise a phrase such as "Helps you feel calmer". Only sessions where you rated both before and after count. A "works best for you" line appears only when two exercises each have at least two rated sessions and a clear gap between them. There are no charts or raw numbers.
 
-### Streaks
+**Free-tier note.** Reset runs on Supabase's free tier, and free projects are paused after about a week of inactivity. If that happens, new sessions cannot be saved and your progress may not show until the project is restored in the Supabase dashboard. Breathing sessions still work. There is **no keep-alive job** at the moment, so a quiet week can pause the project. Check Supabase's current free-tier rules for the exact terms.
 
-Session completion is recorded to `localStorage` as a date and a streak count. On each completion, the app compares the stored date to today: same day keeps the streak, the day before increments it, anything older resets it to one. The streak is shown only on the completion screen, never as a nag or reminder elsewhere in the app.
+## Principles
 
-## Backend & Data
+- **Three exercises, fixed timing.** Each one follows the timing its technique calls for, not whatever suits the audio.
+- **No accounts.** There is no email, password or sign-up screen. Session data goes to the database under an anonymous ID, so it is never tied to a name. Mute and streak stay on the device.
+- **No notifications.** Reset never sends notifications or guilt. The finish screen invites you to come back tomorrow, once. No reminders, no streak pressure.
+- **Calm by design.** One accent colour, plenty of space, serif titles and slow crossfades, so the interface does not compete with the breathing.
 
-Reset uses Supabase as a lightweight backend for session history — a real per-user database without asking anyone to create an account.
+## How it is built
 
-### Anonymous authentication
+No framework and no build step. Plain HTML, CSS and JavaScript, deployed to [Vercel](https://vercel.com) automatically on every push to `main`. The only outside script is the Supabase client, loaded from a CDN in `index.html`.
 
-On first load, the app signs the visitor in anonymously via Supabase Auth. This gives every visitor a stable, unique user ID with no email, password, or personal information involved — consistent with the app's no-accounts philosophy at the UI level, while still enabling a real per-user database underneath. The session persists across visits automatically; there is nothing to log into or manage.
+A session is an async routine in `script.js` that plays the intro, waits a short pause, loops through the breathing phases until the chosen time has passed, plays the outro, then asks for the after-rating. Each new session or Stop cancels any session still running. Phase cues play without blocking the timing and are allowed to finish; the intro and outro are played in full.
 
-### Row-level security
+**Stored on the device (localStorage):** `boxBreathMuted` (mute), `boxBreathStreak` (streak date and count), `reset_install_hint_done` (install hint dismissed).
 
-The `sessions` table has row-level security enabled, with policies scoping every read and write to `auth.uid()`. Each user can only ever see or insert their own rows — one visitor's session history is never reachable by another, enforced at the database level rather than trusted to the client.
+## Files
 
-### The `sessions` table
+- `index.html` — every screen, plus the page head (preview text, manifest link, Supabase script)
+- `style.css` — all styling
+- `script.js` — all logic: the three exercises and their timing, narration, Wake Lock, check-ins, streak, install hint, Supabase and the progress screen
+- `manifest.json` — name, colours and icons for home-screen install
+- `icons/icon-192.png`, `icons/icon-512.png` — app icons
+- `audio/` — seven voice clips: `intro`, `breathe-in`, `hold`, `breathe-out`, `one-more-in`, `breathe-out-fully`, `outro` (`.mp3`)
+- `.gitignore`, `.vercelignore` — both keep a local `.claude/` folder out of the repository and the deploy
 
-A single table records one row per completed session: the technique used, its duration, and optional before/after stress ratings (1-10, or left blank if skipped). Recording is fire-and-forget and fails silently — if Supabase is unreachable, the breathing session itself is completely unaffected; only the logging is skipped.
+## Run it locally
 
-### Insights
-
-The Insights screen turns that history into a personal, plain-language summary of which technique tends to help most, based on the user's own logged sessions — short, human-readable takeaways (e.g. "Helps you feel calmer") rather than numbers or charts. With too little data, it says so plainly rather than presenting a misleading trend, and a "works best for you" callout only appears once the evidence is actually strong enough to support it.
-
-## Getting Started
-
-Reset is static — no dependencies, no build step. Any local static file server will work:
+Any static file server works:
 
 ```bash
 git clone https://github.com/kaushikr09-still/reset-breathing-app.git
@@ -79,8 +100,4 @@ cd reset-breathing-app
 npx serve .
 ```
 
-Then open the printed local URL in a browser. Note that `<audio>` playback relies on HTTP Range request support, so make sure whichever local server you use supports it (most modern static servers, including `serve`, do).
-
-## Live Site
-
-[getreset.vercel.app](https://getreset.vercel.app)
+Open the printed address. The audio needs a server that supports HTTP range requests (`serve` does). The Supabase client loads from a CDN, so you need an internet connection. A local copy talks to the same Supabase project, so a finished session there is saved as a real row.

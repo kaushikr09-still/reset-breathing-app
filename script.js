@@ -3,7 +3,9 @@
   // technique, independent of how long its spoken audio cue takes to play.
   const TECHNIQUES = {
     box: {
-      name: 'Box Breath',
+      name: 'Focus',
+      detail: 'Box breathing · in 4, hold 4, out 4, hold 4',
+      captions: { 2: 'Quick', 4: 'Recommended', 8: 'Deep' },
       closing: "That's it. Carry this focus into what's next.",
       durations: [2, 4, 8],
       defaultMinutes: 4,
@@ -15,7 +17,9 @@
       ],
     },
     '478': {
-      name: 'The Wind-Down',
+      name: 'Sleep',
+      detail: '4-7-8 breathing · in 4, hold 7, out 8',
+      captions: { 2: 'Quick', 4: 'Recommended', 8: 'Deep' },
       closing: "That's it for today. Let your body settle into rest.",
       durations: [2, 4, 8],
       defaultMinutes: 4,
@@ -26,7 +30,9 @@
       ],
     },
     sigh: {
-      name: 'The Instant Calm',
+      name: 'Calm down',
+      detail: 'Two inhales, one long exhale · in 4, in again 1.5, out 8',
+      captions: { 1: 'Quick', 5: 'Deeper' },
       closing: "That's it. Notice how much lighter that feels.",
       durations: [1, 5],
       defaultMinutes: 1,
@@ -137,6 +143,7 @@
   const doneStreakLabel = document.getElementById('done-streak-label');
   const techniqueCards = document.querySelectorAll('.technique-card');
   const durationTitle = document.getElementById('duration-title');
+  const durationDetail = document.getElementById('duration-detail');
   const durationList = document.getElementById('duration-list');
   const selectBackBtn = document.getElementById('select-back-btn');
   const durationBackBtn = document.getElementById('duration-back-btn');
@@ -356,6 +363,7 @@
   function showDurationScreen(techniqueId) {
     const technique = TECHNIQUES[techniqueId];
     durationTitle.textContent = technique.name;
+    durationDetail.textContent = technique.detail;
     durationList.innerHTML = '';
     technique.durations.forEach((minutes) => {
       const isDefault = minutes === technique.defaultMinutes;
@@ -366,10 +374,11 @@
       value.className = 'duration-value';
       value.textContent = `${minutes} min`;
       option.appendChild(value);
-      if (isDefault) {
+      const caption = technique.captions[minutes];
+      if (caption) {
         const note = document.createElement('span');
         note.className = 'duration-note';
-        note.textContent = 'Usual length';
+        note.textContent = caption;
         option.appendChild(note);
       }
       option.addEventListener('click', async () => {
@@ -612,6 +621,25 @@
   function renderInsights(sessions) {
     const total = sessions.length;
     insightsContent.innerHTML = '';
+
+    if (total === 0) {
+      const first = document.createElement('p');
+      first.className = 'insights-headline';
+      first.textContent = 'Your first session starts your journey here.';
+      const second = document.createElement('p');
+      second.className = 'insights-empty';
+      second.textContent = 'Finish a few sessions to see your streak and how your stress changes.';
+      // Same navigation as the home screen's Begin button.
+      const startAction = document.createElement('button');
+      startAction.type = 'button';
+      startAction.className = 'btn-primary';
+      startAction.textContent = 'Start a session';
+      startAction.addEventListener('click', () => showScreen(selectScreen));
+      insightsContent.appendChild(first);
+      insightsContent.appendChild(second);
+      insightsContent.appendChild(startAction);
+      return;
+    }
 
     const totalLine = document.createElement('p');
     totalLine.className = 'insights-total';

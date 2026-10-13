@@ -403,6 +403,15 @@ button:focus-visible {
   border-color: var(--border-hover);
 }
 
+/* Small how-it-works line directly under the length screen's title. */
+.duration-detail {
+  margin: calc(var(--space-3) * -1) 0 0;
+  max-width: 380px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 .duration-note {
   font-size: 0.875rem;
   font-weight: 400;

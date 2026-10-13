@@ -23,27 +23,27 @@
     <h1 class="wordmark">Reset</h1>
     <p class="subtitle">Take a breath. Choose your reset.</p>
     <button id="start-btn" class="btn-primary">Begin</button>
-    <button id="insights-link" class="quiet-link" type="button">Insights</button>
+    <button id="insights-link" class="quiet-link" type="button">Your progress</button>
   </main>
 
   <main id="select-screen" class="screen">
     <button id="select-back-btn" class="back-link" type="button">&larr; Back</button>
-    <h1 class="screen-title">Choose a Technique</h1>
+    <h1 class="screen-title">What do you need right now?</h1>
     <div class="technique-list">
       <button class="technique-card" data-technique="sigh" type="button">
-        <span class="technique-name">The Instant Calm</span>
-        <span class="technique-detail">For a fast reset when stress spikes</span>
+        <span class="technique-name">Calm down</span>
+        <span class="technique-detail">For when stress spikes</span>
         <span class="technique-tagline">Backed by Stanford neuroscience research</span>
       </button>
       <button class="technique-card" data-technique="box" type="button">
-        <span class="technique-name">Box Breath</span>
-        <span class="technique-detail">For focus and steadiness before a demanding moment</span>
+        <span class="technique-name">Focus</span>
+        <span class="technique-detail">Before an exam, a meeting or a big call</span>
         <span class="technique-tagline">Used by Navy SEALs and elite athletes</span>
       </button>
       <button class="technique-card" data-technique="478" type="button">
-        <span class="technique-name">The Wind-Down</span>
-        <span class="technique-detail">For winding down before sleep</span>
-        <span class="technique-tagline">Recommended by doctors worldwide for great sleep</span>
+        <span class="technique-name">Sleep</span>
+        <span class="technique-detail">To ease into rest</span>
+        <span class="technique-tagline">A method doctors often recommend for sleep</span>
       </button>
     </div>
   </main>
@@ -51,7 +51,8 @@
   <main id="duration-screen" class="screen">
     <button id="duration-back-btn" class="back-link" type="button">&larr; Back</button>
     <h1 class="screen-title" id="duration-title">Box Breath</h1>
-    <p class="subtitle">Choose a length</p>
+    <p class="duration-detail" id="duration-detail"></p>
+    <p class="subtitle">How long do you have?</p>
     <div class="duration-list" id="duration-list"></div>
   </main>
 
@@ -86,7 +87,7 @@
 
   <main id="insights-screen" class="screen">
     <button id="insights-back-btn" class="back-link" type="button">&larr; Back</button>
-    <h1 class="screen-title">Insights</h1>
+    <h1 class="screen-title">Your progress</h1>
     <div id="insights-content" class="insights-content"></div>
   </main>
 

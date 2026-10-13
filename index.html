@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Reset</title>
+<meta name="description" content="Three guided breathing exercises for calm, focus and sleep. Free, no sign-up.">
+<meta property="og:title" content="Reset – Free guided breathing">
+<meta property="og:description" content="Three guided breathing exercises for calm, focus and sleep. Free, no sign-up.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://getreset.vercel.app">
+<meta name="twitter:card" content="summary">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -20,14 +26,26 @@
   <div class="grain-overlay" aria-hidden="true"></div>
 
   <main id="home-screen" class="screen visible">
-    <h1 class="wordmark">Reset</h1>
-    <p class="subtitle">Take a breath. Choose your reset.</p>
-    <button id="start-btn" class="btn-primary">Begin</button>
-    <button id="insights-link" class="quiet-link" type="button">Your progress</button>
+    <div class="home-main">
+      <div class="home-hero">
+        <div class="home-circle-wrap" aria-hidden="true"><div class="home-circle"></div></div>
+        <p id="home-greeting" class="home-greeting"></p>
+        <h1 class="wordmark">Reset</h1>
+        <p class="subtitle">Take a breath. Choose your reset.</p>
+        <p class="home-promise">Free guided breathing. <span class="nowrap">No sign-up.</span></p>
+      </div>
+      <button id="start-btn" class="btn-primary">Begin</button>
+    </div>
+    <div class="home-links">
+      <button id="insights-link" class="quiet-link" type="button">Your progress</button>
+      <span class="home-links-dot" aria-hidden="true">·</span>
+      <button id="about-link" class="quiet-link about-link" type="button">About</button>
+    </div>
   </main>
 
   <main id="select-screen" class="screen">
     <button id="select-back-btn" class="back-link" type="button">&larr; Back</button>
+    <div class="screen-scroll">
     <h1 class="screen-title">What do you need right now?</h1>
     <div class="technique-list">
       <button class="technique-card" data-technique="sigh" type="button">
@@ -46,14 +64,17 @@
         <span class="technique-tagline">A method doctors often recommend for sleep</span>
       </button>
     </div>
+    </div>
   </main>
 
   <main id="duration-screen" class="screen">
     <button id="duration-back-btn" class="back-link" type="button">&larr; Back</button>
+    <div class="screen-scroll">
     <h1 class="screen-title" id="duration-title">Box Breath</h1>
     <p class="duration-detail" id="duration-detail"></p>
     <p class="subtitle">How long do you have?</p>
     <div class="duration-list" id="duration-list"></div>
+    </div>
   </main>
 
   <main id="checkin-screen" class="screen">
@@ -95,8 +116,23 @@
 
   <main id="insights-screen" class="screen">
     <button id="insights-back-btn" class="back-link" type="button">&larr; Back</button>
+    <div class="screen-scroll">
     <h1 class="screen-title">Your progress</h1>
     <div id="insights-content" class="insights-content"></div>
+    </div>
+  </main>
+
+  <main id="about-screen" class="screen">
+    <button id="about-back-btn" class="back-link" type="button">&larr; Back</button>
+    <div id="about-scroll" class="about-scroll">
+      <h1 class="screen-title">About Reset</h1>
+      <div class="about-body">
+        <p>Reset is a free, ad-free breathing app. Choose what you need (to calm down, to focus or to sleep) and follow a guided breathing exercise. No sign-up needed.</p>
+        <p>Breathing practices like pranayama have deep roots in yoga. Reset's exercises are modern, research-informed techniques built on the same idea: your breath can change how you feel.</p>
+        <p>Privacy: no account or email is collected. If you use the stress check-in, your ratings are saved against an anonymous ID that is not linked to your name or email. Your streak is stored on your device.</p>
+        <p>Reset is a relaxation aid, not medical advice.</p>
+      </div>
+    </div>
   </main>
 
   <script src="script.js"></script>

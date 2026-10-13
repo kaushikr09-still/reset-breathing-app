@@ -4,7 +4,7 @@
   const TECHNIQUES = {
     box: {
       name: 'Focus',
-      detail: 'Box breathing · in 4, hold 4, out 4, hold 4',
+      detail: 'Breathe in, hold, breathe out, hold. Slow and even.',
       captions: { 2: 'Quick', 4: 'Recommended', 8: 'Deep' },
       closing: "That's it. Carry this focus into what's next.",
       durations: [2, 4, 8],
@@ -18,7 +18,7 @@
     },
     '478': {
       name: 'Sleep',
-      detail: '4-7-8 breathing · in 4, hold 7, out 8',
+      detail: 'Breathe in, hold, then a long, slow breath out.',
       captions: { 2: 'Quick', 4: 'Recommended', 8: 'Deep' },
       closing: "That's it for today. Let your body settle into rest.",
       durations: [2, 4, 8],
@@ -31,7 +31,7 @@
     },
     sigh: {
       name: 'Calm down',
-      detail: 'Two inhales, one long exhale · in 4, in again 1.5, out 8',
+      detail: 'A deep breath in, one small top-up, then a long breath out.',
       captions: { 1: 'Quick', 5: 'Deeper' },
       closing: "That's it. Notice how much lighter that feels.",
       durations: [1, 5],
@@ -153,6 +153,11 @@
   const selectBackBtn = document.getElementById('select-back-btn');
   const durationBackBtn = document.getElementById('duration-back-btn');
   const insightsLink = document.getElementById('insights-link');
+  const homeGreeting = document.getElementById('home-greeting');
+  const aboutScreen = document.getElementById('about-screen');
+  const aboutScroll = document.getElementById('about-scroll');
+  const aboutLink = document.getElementById('about-link');
+  const aboutBackBtn = document.getElementById('about-back-btn');
   const checkinScreen = document.getElementById('checkin-screen');
   const checkinPrompt = document.getElementById('checkin-prompt');
   const checkinScale = document.getElementById('checkin-scale');
@@ -361,14 +366,22 @@
   }
 
   function showScreen(screen) {
-    [homeScreen, selectScreen, durationScreen, checkinScreen, sessionScreen, doneScreen, insightsScreen].forEach((s) => s.classList.remove('visible'));
+    [homeScreen, selectScreen, durationScreen, checkinScreen, sessionScreen, doneScreen, insightsScreen, aboutScreen].forEach((s) => s.classList.remove('visible'));
     screen.classList.add('visible');
+    if (screen === homeScreen) updateHomeGreeting();
+  }
+
+  // Display only: stops a hyphenated word (e.g. "top-up") from breaking across
+  // two lines, by adding an invisible word-joiner after each hyphen. Back-up
+  // for balanced wrapping; the visible text is unchanged.
+  function keepWordsTogether(text) {
+    return text.replace(/-/g, '-\u2060');
   }
 
   function showDurationScreen(techniqueId) {
     const technique = TECHNIQUES[techniqueId];
     durationTitle.textContent = technique.name;
-    durationDetail.textContent = technique.detail;
+    durationDetail.textContent = keepWordsTogether(technique.detail);
     durationList.innerHTML = '';
     technique.durations.forEach((minutes) => {
       const isDefault = minutes === technique.defaultMinutes;
@@ -483,6 +496,47 @@
     targetLabel.classList.remove('hidden');
   }
 
+  // --- Home screen greeting ----------------------------------------------
+  // Display only. Reads the existing streak record (never writes it). If
+  // anything fails, the greeting line is simply hidden.
+
+  function greetingForHour(hour) {
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    if (hour >= 17 && hour < 22) return 'Good evening';
+    return 'Hello';
+  }
+
+  function updateHomeGreeting() {
+    try {
+      const now = new Date();
+      // null = no completed sessions yet; undefined = cannot tell
+      let stored;
+      try {
+        const raw = localStorage.getItem(STREAK_STORAGE_KEY);
+        stored = raw === null ? null : JSON.parse(raw);
+      } catch (err) {
+        stored = undefined;
+      }
+      let text;
+      if (stored === null) {
+        text = 'Welcome';
+      } else {
+        const hello = greetingForHour(now.getHours());
+        const today = dateKey(now);
+        const yesterday = dateKey(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+        const isCurrent = !!stored && (stored.date === today || stored.date === yesterday);
+        text = isCurrent && Number.isInteger(stored.streak) && stored.streak >= 2
+          ? `${hello} · Day ${stored.streak}`
+          : hello;
+      }
+      homeGreeting.textContent = text;
+      homeGreeting.hidden = false;
+    } catch (err) {
+      homeGreeting.hidden = true;
+    }
+  }
+
   function formatTime(totalSeconds) {
     const m = Math.floor(totalSeconds / 60);
     const s = totalSeconds % 60;
@@ -523,40 +577,54 @@
     return n === 1 ? 'point' : 'points';
   }
 
+  // Each result has a main line and (except "Well done.") a supporting line.
+  // Arrow results also carry a spoken version, so screen readers hear the
+  // whole result in words instead of "arrow".
   function buildResult(before, after) {
     const valid = (v) => Number.isInteger(v) && v >= 1 && v <= 10;
-    if (!valid(before) || !valid(after)) return { text: 'Well done.' };
+    if (!valid(before) || !valid(after)) return { main: 'Well done.' };
     if (after < before) {
       const n = before - after;
+      const support = `Stress down ${n} ${pointsWord(n)}.`;
       return {
-        text: `${before} → ${after}. Stress down ${n} ${pointsWord(n)}.`,
-        spoken: `Stress went from ${before} to ${after}. Stress down ${n} ${pointsWord(n)}.`,
+        main: `${before} → ${after}`,
+        support,
+        spoken: `Stress went from ${before} to ${after}. ${support}`,
       };
     }
-    if (after <= 2) return { text: `Already calm at ${after}. Nicely done.` };
-    if (after === before) return { text: `Steady at ${after}. A second round can help.` };
+    if (after <= 2) return { main: `Already calm at ${after}`, support: 'Nicely done.' };
+    if (after === before) return { main: `Steady at ${after}`, support: 'A second round can help.' };
     const n = after - before;
+    const support = `Stress up ${n} ${pointsWord(n)}. Some days take two rounds.`;
     return {
-      text: `${before} → ${after}. Stress up ${n} ${pointsWord(n)}. Some days take two rounds.`,
-      spoken: `Stress went from ${before} to ${after}. Stress up ${n} ${pointsWord(n)}. Some days take two rounds.`,
+      main: `${before} → ${after}`,
+      support,
+      spoken: `Stress went from ${before} to ${after}. ${support}`,
     };
   }
 
   function renderResultLine(before, after) {
     const result = buildResult(before, after);
     const fragment = document.createDocumentFragment();
+    const main = document.createElement('span');
+    main.className = 'done-main';
+    main.textContent = result.main;
+    fragment.appendChild(main);
+    let support = null;
+    if (result.support) {
+      support = document.createElement('span');
+      support.className = 'done-support';
+      support.textContent = result.support;
+      fragment.appendChild(support);
+    }
     if (result.spoken) {
-      // Sighted users see the arrow; screen readers hear it in words.
-      const visual = document.createElement('span');
-      visual.setAttribute('aria-hidden', 'true');
-      visual.textContent = result.text;
+      // Sighted users see the arrow; screen readers hear the whole result.
+      main.setAttribute('aria-hidden', 'true');
+      if (support) support.setAttribute('aria-hidden', 'true');
       const spoken = document.createElement('span');
       spoken.className = 'sr-only';
       spoken.textContent = result.spoken;
-      fragment.appendChild(visual);
       fragment.appendChild(spoken);
-    } else {
-      fragment.appendChild(document.createTextNode(result.text));
     }
     doneMessage.replaceChildren(fragment);
   }
@@ -923,6 +991,12 @@
     loadInsights();
   });
   insightsBackBtn.addEventListener('click', () => showScreen(homeScreen));
+  aboutLink.addEventListener('click', () => {
+    aboutScroll.scrollTop = 0;
+    showScreen(aboutScreen);
+  });
+  aboutBackBtn.addEventListener('click', () => showScreen(homeScreen));
+  updateHomeGreeting();
   muteBtn.addEventListener('click', () => {
     isMuted = !isMuted;
     localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted));

@@ -31,6 +31,11 @@
   --space-6: 48px;
 
   --phase-duration: 4s;
+
+  /* One shared size for the titles of the working screens (about 26px,
+     scaling down a little on narrow phones). "Reset" on the home screen
+     keeps its own larger size. */
+  --title-size: clamp(1.375rem, 6.9vw, 1.625rem);
 }
 
 * {
@@ -189,7 +194,8 @@ h1 {
 }
 
 .screen-title {
-  font-size: 2rem;
+  font-size: var(--title-size);
+  text-wrap: balance;
 }
 
 .subtitle {
@@ -210,6 +216,12 @@ h1 {
   animation: heroReveal 1.3s var(--ease-organic) both;
 }
 
+/* Home tagline in the normal body text colour (the promise line below it
+   stays dimmer). */
+#home-screen .subtitle {
+  color: var(--text);
+}
+
 #home-screen .wordmark {
   animation-delay: 0.1s;
 }
@@ -227,6 +239,219 @@ h1 {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* Home screen: decorative breathing circle, greeting and one-line promise. */
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The wrapper reserves the space, so the pulse never shifts the layout. */
+.home-circle-wrap {
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-circle {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(227, 164, 88, 0.2), transparent 70%);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 46px rgba(227, 164, 88, 0.22);
+  /* One gentle cycle every 8 seconds: grow for 4, shrink for 4. */
+  animation: homeBreathe 8s var(--ease-organic) infinite;
+}
+
+@keyframes homeBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.16); }
+}
+
+#home-screen:not(.visible) .home-circle {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-circle {
+    animation: none;
+  }
+}
+
+.home-greeting {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Temporarily hidden on the home screen. The markup, styles, animation and
+   greeting code are all kept, so removing these three rules brings them back. */
+.home-circle-wrap {
+  display: none;
+}
+
+.home-circle {
+  animation: none;
+}
+
+.home-greeting {
+  display: none;
+}
+
+.home-promise .nowrap {
+  white-space: nowrap;
+}
+
+.home-promise {
+  margin: calc(var(--space-1) * -1) 0 0;
+  text-wrap: balance;
+  max-width: 340px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Home screen layout. The main block (circle, title, Begin) centres itself
+   in the space above the bottom links, so the two can never overlap; on a
+   screen too short for everything, the home screen scrolls instead. */
+#home-screen {
+  justify-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+}
+
+.home-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  margin: auto 0;
+}
+
+/* "Your progress · About" on one centred line at the bottom. */
+.home-links {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-links .quiet-link {
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.home-links-dot {
+  font-size: 0.875rem;
+  color: var(--text-dim);
+}
+
+/* Short screens: smaller circle and tighter gaps, so nothing is removed. */
+@media (max-height: 599px) {
+  #home-screen {
+    gap: var(--space-1);
+    padding: var(--space-2);
+    padding-bottom: calc(var(--space-1) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .home-main {
+    gap: var(--space-3);
+  }
+
+  .home-hero {
+    gap: var(--space-1);
+  }
+
+  .home-circle-wrap {
+    width: 84px;
+    height: 84px;
+  }
+
+  .home-circle {
+    width: 72px;
+    height: 72px;
+  }
+
+  .home-promise {
+    margin-top: calc(var(--space-1) * -0.5);
+  }
+}
+
+/* Screens with a Back button (technique, length): the content starts below
+   Back, so the heading can never overlap it. It stays centred when it fits,
+   and scrolls inside its own box (Back stays put) when it does not. */
+#select-screen,
+#duration-screen,
+#insights-screen {
+  padding-top: 72px;
+}
+
+/* A little more width for the cards and boxes on narrow phones. */
+#select-screen,
+#duration-screen {
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+}
+
+/* Heading and cards sit closer together, so all three cards fit without
+   scrolling on most phones. */
+#select-screen .screen-scroll {
+  gap: var(--space-3);
+}
+
+.screen-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.screen-scroll > * {
+  flex-shrink: 0;
+}
+
+/* About screen: Back stays put; only the text area scrolls if it must. */
+#about-screen {
+  padding-top: 72px;
+}
+
+.about-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.about-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  text-align: left;
+}
+
+.about-body p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--text-muted);
 }
 
 .streak-label {
@@ -313,7 +538,7 @@ button:focus-visible {
 .technique-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 12px;
   width: 100%;
   max-width: 420px;
 }
@@ -322,9 +547,9 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-1);
+  gap: 4px;
   width: 100%;
-  padding: var(--space-3);
+  padding: 14px var(--space-2);
   border-radius: 18px;
   text-align: left;
   background: var(--surface);
@@ -350,12 +575,14 @@ button:focus-visible {
   font-weight: 500;
 }
 
+/* Card hierarchy: title, then the subtitle in the normal body text colour,
+   then the proof line, which is smaller and lighter, so it is the quietest. */
 .technique-detail {
   font-family: var(--font-sans);
-  font-size: 0.88rem;
-  color: var(--text-dim);
+  font-size: 0.95rem;
+  color: var(--text);
   font-weight: 400;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .technique-tagline {
@@ -366,11 +593,24 @@ button:focus-visible {
   line-height: 1.4;
 }
 
+/* Equal-width boxes in one centred row (3 across, or 2 for Calm down).
+   On narrow screens they stack full width instead, so they never wrap 2+1. */
 .duration-list {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 120px);
   justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 359px) {
+  .duration-list {
+    grid-auto-flow: row;
+    grid-auto-columns: minmax(0, 1fr);
+    max-width: 320px;
+    margin: 0 auto;
+  }
 }
 
 .duration-option {
@@ -378,8 +618,8 @@ button:focus-visible {
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
-  min-width: 108px;
-  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+  padding: 14px 8px;
   border-radius: 16px;
   background: transparent;
   border: 1px solid var(--border);
@@ -407,6 +647,7 @@ button:focus-visible {
 .duration-detail {
   margin: calc(var(--space-3) * -1) 0 0;
   max-width: 380px;
+  text-wrap: balance;
   font-size: 0.875rem;
   line-height: 1.4;
   color: var(--text-muted);
@@ -455,6 +696,30 @@ button:focus-visible {
 
 .circle.idle {
   animation: idlePulse 4.5s ease-in-out infinite;
+}
+
+/* The Stop/Mute pill is pinned to the bottom, so the session screen reserves
+   its height plus a 16px clear gap: no text can sit under or touch it. */
+#session-screen {
+  padding-bottom: calc(110px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Short screens: a slightly smaller circle (its expanded size scales with
+   it) and a tighter gap, so the longest line still clears the pill. */
+@media (max-height: 659px) {
+  #session-screen {
+    gap: var(--space-2);
+  }
+
+  .breath-stage {
+    width: 240px;
+    height: 240px;
+  }
+
+  .circle {
+    width: 84px;
+    height: 84px;
+  }
 }
 
 .phase-info {
@@ -518,14 +783,36 @@ button:focus-visible {
   transition: opacity 0.5s var(--ease-organic), visibility 0s linear 0.5s;
 }
 
+/* Result: a main line in the serif title style, then a supporting line in
+   normal body text. (If the result can't be built, the old closing line
+   lands here as plain text and takes this same serif style.) */
 .done-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
   margin: 0;
   max-width: 420px;
+  text-wrap: balance;
   font-family: var(--font-serif);
-  font-size: 1.6rem;
+  font-size: var(--title-size);
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.3;
   letter-spacing: 0.01em;
+}
+
+.done-main {
+  text-wrap: balance;
+}
+
+.done-support {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+  color: var(--text);
+  text-wrap: balance;
 }
 
 /* Final screen: main and quieter button, stacked and centred. */
@@ -615,15 +902,12 @@ button:focus-visible {
   transform: scale(0.97);
 }
 
-#insights-link {
-  margin-top: -20px;
-}
-
 .checkin-prompt {
   margin: 0;
   max-width: 380px;
+  text-wrap: balance;
   font-family: var(--font-serif);
-  font-size: 1.5rem;
+  font-size: var(--title-size);
   font-weight: 500;
   line-height: 1.4;
   letter-spacing: 0.01em;
@@ -705,6 +989,7 @@ button:focus-visible {
 .insights-highlight {
   margin: 0;
   max-width: 340px;
+  text-wrap: balance;
   font-family: var(--font-serif);
   font-size: 1.5rem;
   font-weight: 500;
@@ -715,6 +1000,7 @@ button:focus-visible {
 .insights-headline {
   margin: 0;
   max-width: 320px;
+  text-wrap: balance;
   font-size: 1rem;
   line-height: 1.5;
   color: var(--text);
